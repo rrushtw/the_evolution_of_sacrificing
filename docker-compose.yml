@@ -11,6 +11,21 @@ services:
       # 2. 掛載結果資料夾 (容器內產生的 JSON 會出現在您本地的 ./output)
       - ./output:/app/output
     environment:
-      # --- 模擬參數 (可在此調整，app.py 會讀取) ---
+      # --- 核心參數 ---
+      - GRID_SIZE=60
+      - NOISE=0.05
+      # 每一種生物初始的數量
+      - INITIAL_COPIES_PER_TYPE=20
+
+      # --- 遊戲長度控制 ---
+      # 最大回合同時也是強制停止點
+      - ROUNDS_PER_GAME=1000
+
+      # --- 穩態判定 (提早結束) ---
+      # 連續幾代沒有變化視為穩定？
+      - STABILITY_WINDOW=50
+      # 容許的波動範圍 (隻)
+      - STABILITY_TOLERANCE=3
+
       # 確保 Python 輸出不被緩存，即時看到日誌
       - PYTHONUNBUFFERED=1
