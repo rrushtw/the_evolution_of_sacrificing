@@ -14,8 +14,6 @@ class Chaotic(BaseStrategy):
         # 紫色: 代表神秘、混沌
         return (148, 0, 211)
 
-    def decide(self, opponent_strategy_type):
+    def decide(self, opponent: 'BaseStrategy') -> Action:
         # 擲硬幣
-        if random.random() < 0.5:
-            return Action.NOTIFY
-        return Action.RUN
+        return Action.NOTIFY if random.random() < 0.5 else Action.RUN

@@ -1,4 +1,3 @@
-from typing import Type
 from definitions import Action
 from base_strategy import BaseStrategy
 
@@ -17,6 +16,6 @@ class Altruist(BaseStrategy):
         # 綠色: 代表和平、生機
         return (0, 255, 0)
 
-    def decide(self, opponent_strategy_type: Type[BaseStrategy]) -> Action:
+    def decide(self, opponent: BaseStrategy) -> Action:
         # 無論對方是誰，總是犧牲自己發出警報
         return Action.NOTIFY

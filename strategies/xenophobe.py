@@ -13,8 +13,10 @@ class Xenophobe(BaseStrategy):
         # 深橙色: 警戒色
         return (255, 140, 0)
 
-    def decide(self, opponent_strategy_type):
+    def decide(self, opponent: 'BaseStrategy') -> Action:
         # 只救自己人 (嚴格檢查)
-        if opponent_strategy_type == Xenophobe:  # 或是 type(self)
-            return Action.NOTIFY
+        if isinstance(opponent, Xenophobe):
+            return Action.NOTIFY  # 合作
+
+        # 對於任何非同類，一律逃跑
         return Action.RUN

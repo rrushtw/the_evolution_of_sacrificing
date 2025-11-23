@@ -6,21 +6,10 @@ from collections import deque
 from typing import List
 
 from simulation import Simulation
+from definitions import GameConfig
 
 # ==========================================
-# 1. 讀取設定 (Configuration)
-# ==========================================
-NOISE_RATE = float(os.getenv("NOISE", "0.05"))
-GRID_SIZE = int(os.getenv("GRID_SIZE", "60"))
-INITIAL_COPIES = int(os.getenv("INITIAL_COPIES_PER_TYPE", "20"))
-MAX_ROUNDS = int(os.getenv("ROUNDS_PER_GAME", "1000"))
-STABILITY_WINDOW = int(os.getenv("STABILITY_WINDOW", "30"))
-STABILITY_TOLERANCE = int(os.getenv("STABILITY_TOLERANCE", "5"))
-
-OUTPUT_DIR = "./output"
-
-# ==========================================
-# 2. 視覺化與排名輔助函式
+# 1. 視覺化與排名輔助函式 (保持不變)
 # ==========================================
 
 
@@ -83,9 +72,16 @@ def get_ranked_list(current_counts: dict, extinction_log: dict, all_names: list)
     return ranking_data
 
 
-def format_leaderboard(ranked_list: List[dict]) -> str:
-    """將排名列表轉換為可讀字串"""
+def format_leaderboard(ranked_list: List[dict], color_map: dict[str, tuple] = None) -> str:
+    """
+    將排名列表轉換為可讀字串，並支援 ANSI True Color 上色。
+    Args:
+        ranked_list: 排名資料
+        color_map: { 'StrategyName': (R, G, B) } 的字典
+    """
     parts = []
+    RESET = "\033[0m"
+
     for i, item in enumerate(ranked_list, 1):
         medal = ""
         if i == 1:
@@ -95,7 +91,16 @@ def format_leaderboard(ranked_list: List[dict]) -> str:
         elif i == 3:
             medal = "🥉 "
 
-        parts.append(f"{medal}{item['name']}: {item['display']}")
+        name = item['name']
+        display_name = name
+
+        # 如果有提供顏色表，就幫名字上色
+        if color_map and name in color_map:
+            r, g, b = color_map[name]
+            # ANSI True Color: \033[38;2;R;G;Bm
+            display_name = f"\033[38;2;{r};{g};{b}m{name}{RESET}"
+
+        parts.append(f"{medal}{display_name}: {item['display']}")
 
     return " | ".join(parts)
 
@@ -117,28 +122,35 @@ def check_stability(history: deque, tolerance: int) -> bool:
             break
     return is_stable
 
-# ==========================================
-# 3. 主程式
-# ==========================================
 
+# ==========================================
+# 2. 主程式
+# ==========================================
 
 def main():
     print("🚀 Starting Simulation...")
     print(
-        f"📋 Config: Grid={GRID_SIZE}x{GRID_SIZE}, Noise={NOISE_RATE}, MaxRounds={MAX_ROUNDS}")
+        f"📋 Config: Grid={GameConfig.GRID_SIZE}x{GameConfig.GRID_SIZE}, "
+        f"Noise={GameConfig.NOISE_RATE}, MaxRounds={GameConfig.MAX_ROUNDS}"
+    )
 
-    sim = Simulation(grid_size=GRID_SIZE, noise_rate=NOISE_RATE)
+    sim = Simulation(
+        grid_size=GameConfig.GRID_SIZE,
+        noise_rate=GameConfig.NOISE_RATE
+    )
 
-    # 設定初始人口 (確保這裡有包含所有你想測試的策略)
-    # 只要你在 simulation.py 裡有 import 並加入 available_strategy_types，這裡就可以用
+    # 設定初始人口
     initial_population = {
-        "Altruist": INITIAL_COPIES,
-        "Cheater": INITIAL_COPIES,
-        "Selective": INITIAL_COPIES,
-        "Grudger": INITIAL_COPIES,
-        "Imposter": INITIAL_COPIES
+        strategy_cls().name: GameConfig.INITIAL_COPIES
+        for strategy_cls in sim.available_strategy_types
     }
     sim.populate(initial_population)
+
+    # 建立顏色對照表
+    strategy_colors = {
+        cls().name: cls().color
+        for cls in sim.available_strategy_types
+    }
 
     all_strategy_names = list(initial_population.keys())
     extinction_log = {}  # 紀錄滅絕時間點
@@ -148,14 +160,14 @@ def main():
     print("-" * 40)
 
     history_for_json = []
-    stability_window = deque(maxlen=STABILITY_WINDOW)
+    stability_window = deque(maxlen=GameConfig.STABILITY_WINDOW)
 
     start_time = time.time()
 
     # --- 演化迴圈 ---
     final_ranked_list = []  # 用來存最後的結果
 
-    for generation in range(1, MAX_ROUNDS + 1):
+    for generation in range(1, GameConfig.MAX_ROUNDS + 1):
         sim.run_generation()
         stats = sim.get_stats()
         current_counts = stats['details']
@@ -168,13 +180,13 @@ def main():
         # 計算即時排名
         ranked_list = get_ranked_list(
             current_counts, extinction_log, all_strategy_names)
-        leaderboard_str = format_leaderboard(ranked_list)
+        leaderboard_str = format_leaderboard(ranked_list, strategy_colors)
 
         # 紀錄歷史
         history_for_json.append({
             "generation": generation,
             "stats": stats,
-            "ranking": [item['name'] for item in ranked_list]  # 只存名字順序，節省空間
+            "ranking": [item['name'] for item in ranked_list]
         })
         stability_window.append(current_counts)
 
@@ -190,26 +202,29 @@ def main():
             break
 
         # 結束條件 2: 穩態
-        if check_stability(stability_window, STABILITY_TOLERANCE):
+        if check_stability(stability_window, GameConfig.STABILITY_TOLERANCE):
             print(
-                f"\n🛑 Stability Reached! (Counts haven't changed significantly for {STABILITY_WINDOW} rounds)")
+                f"\n🛑 Stability Reached! (Counts haven't changed significantly for {GameConfig.STABILITY_WINDOW} rounds)")
             final_ranked_list = ranked_list
             break
 
-        # 如果跑到最後一輪，更新最後排名
-        if generation == MAX_ROUNDS:
+        # 如果跑到最後一輪
+        if generation == GameConfig.MAX_ROUNDS:
             final_ranked_list = ranked_list
 
     duration = time.time() - start_time
 
     # 格式化最終排名顯示
-    final_leaderboard_str = format_leaderboard(final_ranked_list)
+    final_leaderboard_str = format_leaderboard(
+        final_ranked_list, strategy_colors)
 
     print("-" * 40)
     print(f"🏁 Simulation Complete in {duration:.2f}s")
-    print(f"👑 Final Ranking: {final_leaderboard_str}")
+    print(f"👑 Final Ranking:\n{final_leaderboard_str.replace(' | ', '\n')}")
 
     # --- 儲存結果 ---
+    # OUTPUT_DIR 還是可以從 os 讀取，或者您也可以放進 GameConfig，這邊先維持 os.getenv
+    OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./output")
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
@@ -224,14 +239,16 @@ def main():
                     "duration_seconds": duration
                 },
                 "config": {
-                    "grid_size": GRID_SIZE,
-                    "noise_rate": NOISE_RATE,
-                    "max_rounds": MAX_ROUNDS,
+                    "grid_size": GameConfig.GRID_SIZE,
+                    "noise_rate": GameConfig.NOISE_RATE,
+                    "max_rounds": GameConfig.MAX_ROUNDS,
+                    "migration_rate": GameConfig.MIGRATION_RATE,
+                    "conversion_rate": GameConfig.CONVERSION_RATE,
                     "initial_population": initial_population
                 },
                 "final_summary": {
                     "ranking_str": final_leaderboard_str,
-                    "ranking_details": final_ranked_list,  # 包含詳細分數與狀態
+                    "ranking_details": final_ranked_list,
                     "extinction_log": extinction_log
                 },
                 "history": history_for_json

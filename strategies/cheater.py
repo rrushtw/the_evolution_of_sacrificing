@@ -1,4 +1,3 @@
-from typing import Type
 from base_strategy import BaseStrategy
 from definitions import Action
 
@@ -17,6 +16,6 @@ class Cheater(BaseStrategy):
         # 紅色: 代表危險、警告
         return (255, 0, 0)
 
-    def decide(self, opponent_strategy_type: Type[BaseStrategy]) -> Action:
+    def decide(self, opponent: BaseStrategy) -> Action:
         # 總是自己逃跑，不管對方死活
         return Action.RUN

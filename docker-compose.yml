@@ -13,19 +13,18 @@ services:
     environment:
       # --- 核心參數 ---
       - GRID_SIZE=60
-      - NOISE=0.05
-      # 每一種生物初始的數量
-      - INITIAL_COPIES_PER_TYPE=20
+      - NOISE_RATE=0.01
+      - MAX_ROUNDS=3000
+      - INITIAL_COPIES=150
 
-      # --- 遊戲長度控制 ---
-      # 最大回合同時也是強制停止點
-      - ROUNDS_PER_GAME=1000
+      # --- 穩態與其他參數 ---
+      - STABILITY_WINDOW=100
+      - STABILITY_TOLERANCE=5
 
-      # --- 穩態判定 (提早結束) ---
-      # 連續幾代沒有變化視為穩定？
-      - STABILITY_WINDOW=50
-      # 容許的波動範圍 (隻)
-      - STABILITY_TOLERANCE=3
+      # --- 社會演化 (新增) ---
+      - MIGRATION_RATE=0.10 # 提高流動性
+      - CONVERSION_RATE=0.05 # 提高感化率
+      - CONVERSION_REPUTATION_DIFF=2
 
       # 確保 Python 輸出不被緩存，即時看到日誌
       - PYTHONUNBUFFERED=1

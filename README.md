@@ -4,24 +4,24 @@
 
 ## 🦁 The Game Mechanics
 
-This is not a standard Prisoner's Dilemma. It models a survival scenario:
-1. **Danger Arrives**: A predator approaches two agents.
-2. **Spotting**: Agents have a probability (e.g., 50%) to spot the danger independently.
-3. **The Decision**:
-   - If you spot danger, you can **Notify** (Risk death to warn neighbor) or **Run** (100% survival).
-   - If you don't spot danger, your survival depends on your neighbor warning you.
-4. **Noise**: Warnings can be lost due to environmental noise (rain, wind), leading to tragedy.
+This simulation extends the classic **Alarm Call Game** with advanced social features:
+
+1.  **Reputation System**: Every agent has a social credit score (`-2` to `+3`). Actions (Notify/Run) directly impact reputation, and reputation influences how others treat you.
+2.  **Noise & Misunderstanding**: Communication isn't perfect (`1%` failure rate). A hero might be mistaken for a coward, testing the society's forgiveness.
+3.  **Migration**: Agents can move to empty spots (`10%` chance), simulating refugees and urbanization.
+4.  **Cultural Transmission**: Agents can be influenced by successful neighbors (`5%` chance), leading to conversion (enlightenment) or corruption.
 
 ## 🧠 Strategies
 
-The simulation currently includes:
-- **😇 Altruist**: Always warns neighbors. High risk, high group benefit.
-- **😈 Cheater**: Always runs. Zero risk, parasitic behavior.
-- **🧐 Selective**: Warns only "trusted" types (Kin or Altruists). Default distrust.
-- **😡 Grudger**: Warns everyone except known bad actors (Cheaters). Default trust.
-- **🎭 Imposter**: Looks like an Altruist (inherits from it) but acts like a Cheater.
-- **🤪 Chaotic**: Randomly chooses to Notify or Run.
-- **🧱 Xenophobe**: Only helps its exact own kind.
+The ecosystem has evolved into a class struggle:
+
+* **😇 Altruist**: The saint. Helps everyone, fuels the reputation economy.
+* **😈 Cheater / Xenophobe**: The selfish base. Exploits or isolates.
+* **🎩 Politician**: The manipulator. Farms reputation from the weak to exploit the elite.
+* **🔮 Prophet**: The forgiving leader. Saves anyone with high reputation, stabilizing society.
+* **⚖️ Sheriff**: The enforcer. Punishes bad behavior regardless of reputation.
+* **🔨 Simpleton / Jacobin**: The reactionaries. Anti-elite or pure tit-for-tat.
+* **🤝 Pragmatist / Samaritan**: The realists. Balances trust with forgiveness to survive noise.
 
 ## 🛠️ Development Setup
 

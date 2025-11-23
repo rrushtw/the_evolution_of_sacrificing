@@ -1,17 +1,13 @@
 import random
-from typing import List, Optional, Dict
+import pkgutil
+import importlib
+import inspect
+from typing import List, Optional, Dict, Type
 from collections import Counter
 
-# 引入我們定義好的規則與策略
+# 引入定義
 from definitions import GameConfig, Action
 from base_strategy import BaseStrategy
-
-# 為了方便初始化，我們引入具體策略
-# (實際專案中也可以用動態載入，但這裡先 Explicit 比較清楚)
-from strategies.altruist import Altruist
-from strategies.cheater import Cheater
-from strategies.selective import Selective
-from strategies.grudger import Grudger
 
 
 class Simulation:
@@ -33,7 +29,43 @@ class Simulation:
         ]
 
         # 可用的策略列表 (用於雜訊時隨機誤判，或繁殖變異)
-        self.available_strategy_types = [Altruist, Cheater, Selective, Grudger]
+        self.available_strategy_types = self._load_all_strategies()
+
+    def _load_all_strategies(self) -> List[Type[BaseStrategy]]:
+        """
+        自動掃描 strategies 資料夾，載入所有繼承自 BaseStrategy 的類別
+        """
+        strategies = []
+        package_name = "strategies"
+
+        # 1. 取得 strategies 套件的資訊
+        # 確保您的 strategies 資料夾內有 __init__.py (即使是空的)
+        package = importlib.import_module(package_name)
+
+        # 2. 遍歷該資料夾下的所有模組 (.py 檔)
+        prefix = package.__name__ + "."
+        for _, name, _ in pkgutil.iter_modules(package.__path__, prefix):
+            try:
+                module = importlib.import_module(name)
+
+                # 3. 檢查模組內的所有成員
+                for member_name, obj in inspect.getmembers(module):
+                    # 篩選條件：
+                    # a. 是個 Class
+                    # b. 繼承自 BaseStrategy
+                    # c. 不是 BaseStrategy 自己
+                    if (inspect.isclass(obj) and
+                        issubclass(obj, BaseStrategy) and
+                            obj is not BaseStrategy):
+
+                        # 避免重複加入 (有些策略可能會被 import 到其他檔案)
+                        if obj not in strategies:
+                            strategies.append(obj)
+                            # print(f"Loaded strategy: {obj().name}") # Debug 用
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to load module {name}: {e}")
+
+        return strategies
 
     def populate(self, initial_counts: Dict[str, int]):
         """
@@ -154,73 +186,85 @@ class Simulation:
         # 更新網格
         self.grid = next_grid_state
 
+        # --- Phase 3: 感化 (Cultural Transmission) ---
+        # 這模擬了「觀念傳播」。我不死，但我改變想法。
+        self._handle_cultural_transmission()
+
+        # --- Phase 4: 遷徙 (Migration) ---
+        # 這模擬了「人口流動」。
+        self._handle_migration()
+
     def _interact_and_check_survival(self, me: BaseStrategy, neighbor: BaseStrategy) -> bool:
         """
         單次互動邏輯：決定 'me' 是否存活。
-
-        修正後的邏輯：
-        1. 威脅來襲 (Event start)。
-        2. 'me' 嘗試察覺危險。
-        3. 'neighbor' 嘗試察覺危險。
-        4. 如果 'me' 沒察覺，就必須依賴 'neighbor' 的警告。
-        5. 加入雜訊：Neighbor 發出警告，但可能被環境音蓋過 (Communication Failure)。
+        包含：角色判定 -> 決策(傳入實例) -> 履歷更新 -> 生死判定
         """
-
-        # --- 步驟 1: 我自己有沒有發現危險？ ---
+        # 1. 判定角色：我有沒有發現危險？
         i_spotted_danger = random.random() < GameConfig.PROB_SPOT_DANGER
 
         if i_spotted_danger:
-            # === 情境 A: 我發現了危險 ===
-            # 我掌握了自己的命運。我決定行動。
-
-            # (這裡暫時移除了身份誤判的雜訊，因為您定義雜訊為溝通失敗)
-            # 但 Selective 還是會根據對方是誰來決定要不要救對方
-            # 不過，這裡計算的是「我」的存活。
-
-            # 如果我選擇 RUN -> 我存活率 100% (SURVIVAL_SPOTTER_RUN)
-            # 如果我選擇 NOTIFY -> 我有死亡風險 (SURVIVAL_SPOTTER_NOTIFY)
-
-            my_action = me.decide(type(neighbor))
-
-            if my_action == Action.NOTIFY:
-                # 我選擇犧牲/冒險
-                return random.random() < GameConfig.SURVIVAL_SPOTTER_NOTIFY
-            else:
-                # Action.RUN: 我選擇自保
-                return random.random() < GameConfig.SURVIVAL_SPOTTER_RUN
-
+            return self._handle_spotter_scenario(me, neighbor)
         else:
-            # === 情境 B: 我沒發現危險 (I am ignorant) ===
-            # 我的命運完全掌握在鄰居手裡
+            return self._handle_listener_scenario(me, neighbor)
 
-            # 1. 鄰居發現了嗎？
-            neighbor_spotted_danger = random.random() < GameConfig.PROB_SPOT_DANGER
+    def _handle_spotter_scenario(self, me: BaseStrategy, neighbor: BaseStrategy) -> bool:
+        """
+        情境 A: 我發現了危險 (I am the Spotter)
+        """
+        # [關鍵修改 1] 傳入 neighbor【實例】，讓我可以查他的信譽/履歷
+        my_action = me.decide(neighbor)
 
-            if not neighbor_spotted_danger:
-                # 慘況：雙方都沒發現
-                # 根據定義，不知情者存活率極低 (通常是 0.0)
-                return random.random() < GameConfig.SURVIVAL_LISTENER_IGNORANT
+        # [關鍵修改 2] 更新我的履歷 (這會影響我的信譽分數)
+        me.update_history(my_action, neighbor)
 
-            # 2. 鄰居發現了，他決定怎麼做？
-            neighbor_action = neighbor.decide(type(me))
+        if my_action == Action.NOTIFY:
+            # 選擇犧牲
+            return random.random() < GameConfig.SURVIVAL_SPOTTER_NOTIFY
+        else:
+            # 選擇逃跑
+            return random.random() < GameConfig.SURVIVAL_SPOTTER_RUN
 
-            if neighbor_action == Action.RUN:
-                # 鄰居自私逃跑 -> 我不知情 -> 死亡
-                return random.random() < GameConfig.SURVIVAL_LISTENER_IGNORANT
+    def _handle_listener_scenario(self, me: BaseStrategy, neighbor: BaseStrategy) -> bool:
+        """
+        情境 B: 我沒發現危險 (I am the Listener)
+        """
+        # 1. 鄰居發現了嗎？
+        neighbor_spotted = random.random() < GameConfig.PROB_SPOT_DANGER
+        if not neighbor_spotted:
+            # 雙盲 -> 聽天由命
+            return random.random() < GameConfig.SURVIVAL_LISTENER_IGNORANT
 
+        # 2. 鄰居決定怎麼做？
+        neighbor_action = neighbor.decide(me)
+
+        # 更新鄰居的履歷
+        # 注意：即使他是不小心發出聲音救了我，他的【意圖】依然是 RUN，所以履歷照樣記 RUN (扣分)
+        neighbor.update_history(neighbor_action, me)
+
+        if neighbor_action == Action.RUN:
+            # [新增雙向雜訊機制]
+            # 鄰居選擇逃跑。理論上他想偷偷溜走...
+            # 但環境雜訊(或他太笨拙)可能會導致他發出聲音被我發現
+
+            accidental_alert = random.random() < self.noise_rate
+
+            if accidental_alert:
+                # 幸運！我看到他慌張逃跑，我也跟著逃 -> 視為被警告
+                return random.random() < GameConfig.SURVIVAL_LISTENER_WARNED
             else:
-                # 鄰居選擇通知 (Action.NOTIFY)
-                # === 關鍵修正：加入溝通雜訊 (Communication Noise) ===
-                # 即使鄰居喊了，可能因為下雨我沒聽到
+                # 他跑得很安靜，我完全不知情 -> 聽天由命
+                return random.random() < GameConfig.SURVIVAL_LISTENER_IGNORANT
 
-                message_lost = random.random() < self.noise_rate
+        # 3. 鄰居通知，檢查雜訊
+        else:  # neighbor_action == Action.NOTIFY
+            message_lost = random.random() < self.noise_rate
 
-                if message_lost:
-                    # 悲劇：鄰居冒險喊了(他可能死)，但我沒聽到(我也死)
-                    return random.random() < GameConfig.SURVIVAL_LISTENER_IGNORANT
-                else:
-                    # 成功接收訊號 -> 我活下來
-                    return random.random() < GameConfig.SURVIVAL_LISTENER_WARNED
+            if message_lost:
+                # 悲劇：鄰居喊了，環境太吵我沒聽到 -> 聽天由命
+                return random.random() < GameConfig.SURVIVAL_LISTENER_IGNORANT
+            else:
+                # 成功接收訊號 -> 視為被警告
+                return random.random() < GameConfig.SURVIVAL_LISTENER_WARNED
 
     def get_stats(self) -> dict:
         """統計當前各種族的數量"""
@@ -237,3 +281,88 @@ class Simulation:
             "total_alive": total_alive,
             "details": dict(counts)
         }
+
+    # ======================================================
+    # 新增的邏輯方法
+    # ======================================================
+
+    def _handle_cultural_transmission(self):
+        """
+        感化機制：
+        遍歷所有活著的個體，檢查周圍鄰居。
+        如果鄰居的聲譽 (Reputation) 顯著高於自己，
+        自己有機會「拜師學藝」，轉變成鄰居的策略。
+        """
+        # 建立一個 copy 避免在遍歷時修改 grid 造成混亂
+        # 但我們要改的是物件內部的狀態，或者直接替換物件
+        # 為了簡單起見，我們記錄要變更的座標
+        conversions = []
+
+        for r in range(self.size):
+            for c in range(self.size):
+                me = self.grid[r][c]
+                if me is None:
+                    continue
+
+                # 找鄰居
+                neighbors_coords = self.get_neighbors(r, c)
+                living_neighbors = [
+                    self.grid[nr][nc] for nr, nc in neighbors_coords
+                    if self.grid[nr][nc] is not None
+                ]
+
+                if not living_neighbors:
+                    continue
+
+                # 隨機挑一個鄰居來比較 (或者找最強的)
+                target = random.choice(living_neighbors)
+
+                if (random.random() < GameConfig.CONVERSION_RATE):
+                    # 記錄這筆感化：(座標, 新策略類別)
+                    conversions.append((r, c, type(target)))
+
+        # 應用感化
+        for r, c, new_strategy_class in conversions:
+            old_agent = self.grid[r][c]
+            # 建立新策略實例
+            new_agent = new_strategy_class()
+            # [重要] 是否要繼承舊的記憶/聲譽？
+            # 通常「改過自新」代表聲譽重置，或者是繼承部分？
+            # 這裡我們先設定為：重新做人 (Reputation 重置, 但繼承 Last Action 以防作弊)
+            new_agent.last_action = old_agent.last_action
+            # new_agent.reputation = 0 # 新身分從 0 開始
+
+            self.grid[r][c] = new_agent
+
+    def _handle_migration(self):
+        """
+        遷徙機制：
+        活著的個體有機會移動到鄰近的「空格」。
+        這模擬了難民、移民、尋找資源。
+        """
+        # 為了公平，隨機決定移動順序
+        all_coords = [(r, c) for r in range(self.size)
+                      for c in range(self.size)]
+        random.shuffle(all_coords)
+
+        for r, c in all_coords:
+            agent = self.grid[r][c]
+            if agent is None:
+                continue
+
+            # 擲骰子決定是否想搬家
+            if random.random() < GameConfig.MIGRATION_RATE:
+                # 找周圍的空格
+                neighbors_coords = self.get_neighbors(r, c)
+                empty_spots = [
+                    (nr, nc) for nr, nc in neighbors_coords
+                    if self.grid[nr][nc] is None
+                ]
+
+                if empty_spots:
+                    # 隨機選一個空位搬過去
+                    target_r, target_c = random.choice(empty_spots)
+
+                    # 移動！
+                    self.grid[target_r][target_c] = agent
+                    self.grid[r][c] = None
