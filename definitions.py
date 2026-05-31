@@ -1,23 +1,23 @@
 import os
-from enum import Enum, IntEnum
+from enum import Enum
 
 
-class Reputation(IntEnum):
+class Reputation(Enum):
     """
-    使用 IntEnum 讓我們可以直接比較大小 (例如 LEGEND > GOOD)
-    範圍縮小至 -2 ~ 3，讓背叛代價更顯著。
+    Binary Standing Reputation (Sugden 1986).
+
+    GOOD: presumed cooperative; refusing to help me is now bad.
+    BAD : presumed defector; refusing to help me is justified.
+
+    New agents start as GOOD (presumption of innocence).
     """
-    LEGEND = 3       # 傳說 (Prophet 門檻)
-    TRUSTED = 2      # 信賴 (Meritocrat/Pragmatist 門檻)
-    GOOD = 1         # 良民 (願意做一點好事的)
-    NEUTRAL = 0      # 普通/排外者 (Xenophobe 預設)
-    SUSPICIOUS = -1  # 可疑 (背叛過一次)
-    EVIL = -2        # 惡棍 (Cheater 預設)
+    GOOD = "Good"
+    BAD = "Bad"
 
 
 class Action(Enum):
     """
-    行動列舉
+    Spotter's choice when danger is detected.
     """
     NOTIFY = "Notify"
     RUN = "Run"
@@ -25,21 +25,17 @@ class Action(Enum):
 
 class GameConfig:
     """
-    統一管理所有參數。
-    優先讀取環境變數，若無則使用預設值。
+    All tunables in one place. ENV vars override defaults.
     """
 
-    # --- 基礎模擬設定 ---
-    GRID_SIZE = int(os.getenv("GRID_SIZE", "60"))
-    NOISE_RATE = float(os.getenv("NOISE_RATE", "0.01"))  # 注意：統一命名為 NOISE_RATE
-    MAX_ROUNDS = int(os.getenv("MAX_ROUNDS", "3000"))
-    INITIAL_COPIES = int(os.getenv("INITIAL_COPIES", "150"))
+    # --- Noise ---
+    # External noise: signal lost / accidentally tipped off
+    NOISE_RATE = float(os.getenv("NOISE_RATE", "0.01"))
+    # Internal noise: slip of tongue / fumble; the engine still treats
+    # the slipped action as the agent's "intent" for reputation purposes.
+    INTERNAL_NOISE_RATE = float(os.getenv("INTERNAL_NOISE_RATE", "0.02"))
 
-    # --- 穩態判定 ---
-    STABILITY_WINDOW = int(os.getenv("STABILITY_WINDOW", "100"))
-    STABILITY_TOLERANCE = int(os.getenv("STABILITY_TOLERANCE", "5"))
-
-    # --- 生存機率參數 ---
+    # --- Alarm Call mechanics ---
     PROB_SPOT_DANGER = float(os.getenv("PROB_SPOT_DANGER", "0.5"))
     SURVIVAL_SPOTTER_NOTIFY = float(
         os.getenv("SURVIVAL_SPOTTER_NOTIFY", "0.9"))
@@ -49,16 +45,19 @@ class GameConfig:
     SURVIVAL_LISTENER_IGNORANT = float(
         os.getenv("SURVIVAL_LISTENER_IGNORANT", "0.05"))
 
-    # --- 社會演化參數 ---
-    # 遷徙率
-    MIGRATION_RATE = float(os.getenv("MIGRATION_RATE", "0.10"))
+    # --- Evolution (well-mixed; Axelrod-style) ---
+    # Defaults sized for ~1s/generation on a laptop with 10 strategies.
+    # Crank up via env vars for more statistical power.
+    INITIAL_COPIES = int(os.getenv("INITIAL_COPIES", "10"))
+    KILL_COUNT = int(os.getenv("KILL_COUNT", "5"))
+    ROUNDS_PER_GAME = int(os.getenv("ROUNDS_PER_GAME", "20"))
+    AVG_MATCHES_PER_STRATEGY = int(
+        os.getenv("AVG_MATCHES_PER_STRATEGY", "20"))
+    MAX_GENERATIONS = int(os.getenv("MAX_GENERATIONS", "3000"))
 
-    # 感化機制
-    CONVERSION_RATE = float(os.getenv("CONVERSION_RATE", "0.05"))
-    # 配合新的聲譽範圍 (-2~3)，門檻建議設為 2 (例如 0 變成 2)
-    CONVERSION_REPUTATION_DIFF = int(
-        os.getenv("CONVERSION_REPUTATION_DIFF", "2"))
-
-    # 聲譽邊界 (用於 BaseStrategy 的 clamp)
-    MAX_REPUTATION = Reputation.LEGEND  # 對應 Reputation.LEGEND
-    MIN_REPUTATION = Reputation.EVIL  # 對應 Reputation.EVIL
+    # --- Stability ---
+    # Stable = every species' count has fluctuated by ≤ TOLERANCE for the
+    # last THRESHOLD generations. (Species-set-only stability is too lax —
+    # counts can still swing wildly while the set is unchanged.)
+    STABILITY_THRESHOLD = int(os.getenv("STABILITY_THRESHOLD", "100"))
+    STABILITY_TOLERANCE = int(os.getenv("STABILITY_TOLERANCE", "5"))

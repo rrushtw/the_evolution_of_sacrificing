@@ -1,73 +1,144 @@
-from abc import ABC, abstractmethod
+import abc
+import random
+import uuid
 from typing import Tuple
+
 from definitions import Action, GameConfig, Reputation
 
-# ==========================================
-# 策略介面 (Strategy Abstract Base Class)
-# ==========================================
 
-
-class BaseStrategy(ABC):
+class BaseStrategy(abc.ABC):
     """
-    所有策略的 base class
+    Abstract contract for every strategy.
+
+    Phase 1 design:
+    - decide() receives ONLY 4 public fields about the opponent — never the
+      opponent instance itself. This blocks any `type(opponent)` cheat and
+      enforces the "you don't know friend from foe" research premise.
+    - Reputation is binary (GOOD/BAD), updated by Standing Strategy rules.
+    - Memory has two layers: my_history (public log) and opponent_history
+      (private record keyed by opponent's unique_id).
     """
 
     def __init__(self):
-        # 記錄上一輪我做了什麼
-        self.last_action: Action = Action.NOTIFY
+        self.unique_id: str = str(uuid.uuid4())
+        self.reset()
 
-        # 信譽分數：合作加分，背叛扣分
-        self.reputation: int = 0
+    def reset(self):
+        """Called at the start of every generation."""
+        # Standing rule 4: new agents start GOOD (presumption of innocence).
+        self.reputation: Reputation = Reputation.GOOD
+        # Each entry: {"my_action": Action|None, "opponent_action": Action|None}
+        # None = that party didn't spot danger this round.
+        self.my_history: list[dict] = []
+        self.opponent_history: dict[str, list[dict]] = {}
+        # Sum of survival probabilities across all interactions this generation.
+        self.total_score: float = 0.0
+
+    # ------------------------------------------------------------------
+    # Identity (each strategy must declare its public-facing identity)
+    # ------------------------------------------------------------------
 
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def name(self) -> str:
-        """策略顯示名稱 (e.g., 'Altruist')"""
+        """Display name, e.g. 'Altruist'."""
         pass
 
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def color(self) -> Tuple[int, int, int]:
-        """策略代表顏色 (R, G, B)，用於地圖視覺化"""
+        """(R, G, B) for terminal output."""
         pass
 
-    @abstractmethod
-    def decide(self, opponent: 'BaseStrategy') -> Action:
+    # ------------------------------------------------------------------
+    # Decision (the only contract the engine cares about)
+    # ------------------------------------------------------------------
+
+    @abc.abstractmethod
+    def decide(
+        self,
+        opponent_unique_id: str,
+        opponent_reputation: Reputation,
+        opponent_history: list[dict],
+    ) -> Action:
         """
-        核心決策邏輯。
+        Called by the engine when this agent is the spotter.
 
         Args:
-            pponent: 對手的【實例 (Instance)】。
+            opponent_unique_id: opaque ID — only useful for keying into
+                self.opponent_history for private memory of this opponent.
+            opponent_reputation: public Standing of the opponent (GOOD/BAD).
+            opponent_history: opponent's full public log (their my_history).
+                Each entry is a dict like {"my_action": ..., "opponent_action": ...}
+                from the opponent's point of view.
 
         Returns:
-            Action.NOTIFY or Action.RUN
+            Action.NOTIFY or Action.RUN.
         """
         pass
 
-    def update_history(self, action: Action, opponent: 'BaseStrategy'):
-        """
-        每輪結束後，更新自己的履歷。
-        修正邏輯：只有幫助「非同類」時，才增加聲譽。
-        """
-        self.last_action = action
+    # ------------------------------------------------------------------
+    # Noise (slip of tongue — slipped intent is treated as real intent)
+    # ------------------------------------------------------------------
 
-        if action == Action.NOTIFY:
-            # 判斷是否為同類 (Exact Type Match)
-            # 如果我是 Xenophobe，你是 Xenophobe，這只是本份，不加分。
-            # 如果我是 Altruist，你是 Cheater，我還救你，這就是聖人，加分。
-            if type(self) is type(opponent):
-                # 同類互助：視為本能/義務，聲譽不變 (或是只加一點點)
-                pass
-            elif self.reputation < GameConfig.MAX_REPUTATION:
-                # 跨種族互助：視為真正的利他，聲譽上升
-                self.reputation += 1
+    def apply_internal_noise(self, intended: Action) -> Action:
+        if random.random() < GameConfig.INTERNAL_NOISE_RATE:
+            return Action.RUN if intended == Action.NOTIFY else Action.NOTIFY
+        return intended
 
-        elif action == Action.RUN and self.reputation > GameConfig.MIN_REPUTATION:
-            # 只要逃跑，無論對象是誰，通常都會被視為不可靠
-            if self.reputation >= Reputation.TRUSTED:
-                self.reputation = Reputation.SUSPICIOUS
-            else:
-                self.reputation -= 1
+    # ------------------------------------------------------------------
+    # Bookkeeping — called by the engine after every interaction
+    # ------------------------------------------------------------------
+
+    def record_round(
+        self,
+        opponent_unique_id: str,
+        my_action: Action | None,
+        opponent_action: Action | None,
+        survival_score: float,
+    ):
+        """
+        Append this round to both histories and accumulate score.
+        Called by the engine for both participants of each interaction.
+        """
+        record = {
+            "my_action": my_action,
+            "opponent_action": opponent_action,
+        }
+        self.my_history.append(record)
+        self.opponent_history.setdefault(opponent_unique_id, []).append(record)
+        self.total_score += survival_score
+
+    def update_reputation(
+        self,
+        my_action: Action,
+        opponent_reputation_at_time: Reputation,
+    ):
+        """
+        Apply Standing Strategy (Sugden 1986) — 4 rules total:
+
+            1. NOTIFY                    -> GOOD (unconditional)
+            2. RUN against GOOD opponent -> BAD
+            3. RUN against BAD opponent  -> unchanged (justified defection)
+            4. new agent                 -> GOOD (handled in reset())
+
+        Called by the engine ONLY when this agent was the spotter
+        (listeners don't make a moral choice).
+        """
+        if my_action == Action.NOTIFY:
+            self.reputation = Reputation.GOOD
+        elif my_action == Action.RUN:
+            if opponent_reputation_at_time == Reputation.GOOD:
+                self.reputation = Reputation.BAD
+            # else: justified defection — no change
+
+    # ------------------------------------------------------------------
+    # Convenience helpers strategies may use
+    # ------------------------------------------------------------------
+
+    def private_history_with(self, opponent_unique_id: str) -> list[dict]:
+        """Sugar: my private record of interactions with this specific opponent."""
+        return self.opponent_history.get(opponent_unique_id, [])
 
     def __str__(self):
         return self.name
