@@ -1,11 +1,9 @@
 from base_strategy import BaseStrategy
-from definitions import Action
+from definitions import Action, Reputation
 
 
 class Cheater(BaseStrategy):
-    """
-    😈 絕對自私者：永遠選擇背叛（逃跑）。
-    """
+    """Unconditional defector. Always RUN."""
 
     @property
     def name(self) -> str:
@@ -13,9 +11,12 @@ class Cheater(BaseStrategy):
 
     @property
     def color(self) -> tuple:
-        # 紅色: 代表危險、警告
         return (255, 0, 0)
 
-    def decide(self, opponent: BaseStrategy) -> Action:
-        # 總是自己逃跑，不管對方死活
+    def decide(
+        self,
+        opponent_unique_id: str,
+        opponent_reputation: Reputation,
+        opponent_history: list[dict],
+    ) -> Action:
         return Action.RUN

@@ -1,20 +1,38 @@
-# Docker 相關檔案
+# Docker config files (no need inside the image)
 Dockerfile
 docker-compose.yml
+.dockerignore
 
-# Git/VSCode/Devcontainer (不需要放進映像檔)
+# Git / IDE / Devcontainer
 .git
 .gitignore
 .devcontainer
 .vscode
+.idea
 
-# Python 緩存與虛擬環境
-pycache/
+# Python caches
+__pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
 .venv
 venv/
+.venv/
 
-# 本地的輸出結果 (容器內會自己產生)
+# Env files — loaded at runtime via env_file, never baked in
+.env
+.env.example
+
+# Local outputs (container generates its own)
 output/
 logs/
 *.log
+
+# Claude planning / scratch
+claude_tasks/
+
+# Claude Code — never needed inside the image
+.claude/

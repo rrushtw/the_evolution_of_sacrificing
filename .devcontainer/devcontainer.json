@@ -1,7 +1,8 @@
 {
     "image": "mcr.microsoft.com/devcontainers/python:3.12",
     "runArgs": [
-        "--name=the_evolution_of_sacrificing"
+        "--name=the_evolution_of_sacrificing",
+        "--env-file=${localWorkspaceFolder}/.env"
     ],
     "customizations": {
         "vscode": {

@@ -1,19 +1,24 @@
-# strategies/chaotic.py
 import random
+
 from base_strategy import BaseStrategy
-from definitions import Action
+from definitions import Action, Reputation
 
 
 class Chaotic(BaseStrategy):
+    """50/50 coin flip every round. Baseline noise floor."""
+
     @property
     def name(self) -> str:
         return "Chaotic"
 
     @property
     def color(self) -> tuple:
-        # 紫色: 代表神秘、混沌
         return (148, 0, 211)
 
-    def decide(self, opponent: 'BaseStrategy') -> Action:
-        # 擲硬幣
+    def decide(
+        self,
+        opponent_unique_id: str,
+        opponent_reputation: Reputation,
+        opponent_history: list[dict],
+    ) -> Action:
         return Action.NOTIFY if random.random() < 0.5 else Action.RUN
