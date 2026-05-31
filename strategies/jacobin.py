@@ -3,29 +3,31 @@ from definitions import Action, Reputation
 
 
 class Jacobin(BaseStrategy):
+    """
+    Public Grim Trigger: if the opponent has EVER chosen RUN in their
+    public log, refuse to help them — forever. Pure ones never tarnish.
+
+    Differs from Sheriff (who tracks live reputation) and Grudger (private
+    memory of personal grudges) — Jacobin is permanent ostracism based on
+    a globally-visible single transgression.
+    """
+
     @property
     def name(self) -> str:
         return "Jacobin"
 
     @property
     def color(self) -> tuple:
-        # 鮮血般的深紅 (代表革命與清洗)
-        return (178, 34, 34)  # FireBrick
+        return (178, 34, 34)
 
-    def decide(self, opponent: BaseStrategy) -> Action:
-        # 1. 永遠團結同志
-        if type(self) is type(opponent):
-            return Action.NOTIFY
+    def decide(
+        self,
+        opponent_unique_id: str,
+        opponent_reputation: Reputation,
+        opponent_history: list[dict],
+    ) -> Action:
+        for r in opponent_history:
+            if r.get("my_action") == Action.RUN:
+                return Action.RUN
 
-        # 2. 【革命審判】檢查偽君子 (Hypocrite Check)
-        # 如果你是高位者 (LEGEND/TRUSTED) 卻背叛
-        # 這裡設定門檻為 TRUSTED (2)
-        if opponent.reputation >= Reputation.TRUSTED and opponent.last_action == Action.RUN:
-            return Action.RUN
-
-        # 3. 一般情況：看行為 (類似 Meritocrat，但沒那麼菁英主義)
-        # 只要你上一輪是合作的，我就合作
-        if opponent.last_action == Action.NOTIFY:
-            return Action.NOTIFY
-
-        return Action.RUN
+        return Action.NOTIFY

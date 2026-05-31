@@ -1,11 +1,9 @@
-from definitions import Action
 from base_strategy import BaseStrategy
+from definitions import Action, Reputation
 
 
 class Altruist(BaseStrategy):
-    """
-    😇 絕對犧牲者 (Altruist)
-    """
+    """Unconditional cooperator. NOTIFY no matter what."""
 
     @property
     def name(self) -> str:
@@ -13,9 +11,12 @@ class Altruist(BaseStrategy):
 
     @property
     def color(self) -> tuple:
-        # 綠色: 代表和平、生機
         return (0, 255, 0)
 
-    def decide(self, opponent: BaseStrategy) -> Action:
-        # 無論對方是誰，總是犧牲自己發出警報
+    def decide(
+        self,
+        opponent_unique_id: str,
+        opponent_reputation: Reputation,
+        opponent_history: list[dict],
+    ) -> Action:
         return Action.NOTIFY

@@ -1,38 +1,27 @@
-import random
 from base_strategy import BaseStrategy
 from definitions import Action, Reputation
 
 
 class Sheriff(BaseStrategy):
+    """
+    Pure Standing executor: NOTIFY anyone currently GOOD,
+    RUN against anyone currently BAD. Reputation is the only input.
+    """
+
     @property
     def name(self) -> str:
         return "Sheriff"
 
     @property
     def color(self) -> tuple:
-        # 警徽金 / 銅色
         return (184, 134, 11)
 
-    def decide(self, opponent: BaseStrategy) -> Action:
-        # 1. 族群團結
-        if type(self) is type(opponent):
+    def decide(
+        self,
+        opponent_unique_id: str,
+        opponent_reputation: Reputation,
+        opponent_history: list[dict],
+    ) -> Action:
+        if opponent_reputation == Reputation.GOOD:
             return Action.NOTIFY
-
-        # 2. 絕對過濾：聲譽太差的 (EVIL/NEUTRAL)，直接不理
-        # 這可以過濾掉 Xenophobe 和 Cheater
-        if opponent.reputation <= Reputation.NEUTRAL:
-            return Action.RUN
-
-        # 3. 行為審查
-        if opponent.last_action == Action.NOTIFY:
-            return Action.NOTIFY
-
-        else:  # opponent.last_action == RUN
-            # 即使你聲譽是 LEGEND，你剛剛 RUN 了，我也不會因為你聲譽高就原諒你
-            # (這是剋制政客的關鍵)
-
-            # 但為了抗雜訊，我給予極小的機率 (5%) 原諒
-            if random.random() < 0.05:
-                return Action.NOTIFY
-
-            return Action.RUN
+        return Action.RUN
