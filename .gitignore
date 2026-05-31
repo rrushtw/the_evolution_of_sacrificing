@@ -1,16 +1,28 @@
-# Ignore python cache file
+# Editor / IDE
 .vscode/
+.idea/
+
+# Python caches
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Ignore logs
-logs/
-*.log
-
-# Anything else
+# Virtual environments
 .venv
 .env
 venv/
 .venv/
 
+# Local logs / runtime artifacts
+logs/
+*.log
 output/
+
+# Claude planning / scratch
+claude_tasks/
+
+# Claude Code — personal/local only (keep .claude/settings.json shareable)
+.claude/settings.local.json
+.claude/cache/

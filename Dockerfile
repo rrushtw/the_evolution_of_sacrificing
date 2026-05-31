@@ -13,4 +13,4 @@ COPY . .
 
 # 5. 預設執行命令
 #    -u 參數是為了讓 print() 的日誌能即時顯示在 docker logs 中
-CMD ["python", "-u", "app.py"]
+CMD ["python", "-u", "main.py"]

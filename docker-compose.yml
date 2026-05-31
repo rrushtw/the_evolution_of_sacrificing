@@ -1,30 +1,26 @@
 services:
   simulator:
-    build: # 使用當前目錄的 Dockerfile
-      context: .
-      dockerfile: Dockerfile
+    # ---- Build ----
+    # Short form: equivalent to `context: . / dockerfile: Dockerfile`.
+    build: .
+
+    # ---- Identification ----
     container_name: sacrificing_simulator
-    restart: on-failure:5 # 如果失敗 (例如 Python 腳本崩潰)，最多重試 5 次
+
+    # ---- Lifecycle / behavior ----
+    restart: on-failure:5
+    init: true         # tini as PID 1 → clean Ctrl+C, no zombie processes
+    tty: true          # pseudo-TTY → tqdm bar + ANSI colors render in place
+
+    # ---- Configuration ----
+    # All sim parameters live in .env (gitignored, copy from .env.example).
+    # Shared with .devcontainer so dev shell and prod container see the same vars.
+    env_file:
+      - .env
+
+    # ---- Storage ----
     volumes:
-      # 1. 掛載策略資料夾 (您可以在本地修改/新增/刪除 .py，容器會即時讀取)
+      # Strategies are hot-mounted — edit locally, next generation picks them up.
       - ./strategies:/app/strategies
-      # 2. 掛載結果資料夾 (容器內產生的 JSON 會出現在您本地的 ./output)
+      # Results land in ./output as JSON per run.
       - ./output:/app/output
-    environment:
-      # --- 核心參數 ---
-      - GRID_SIZE=60
-      - NOISE_RATE=0.01
-      - MAX_ROUNDS=3000
-      - INITIAL_COPIES=150
-
-      # --- 穩態與其他參數 ---
-      - STABILITY_WINDOW=100
-      - STABILITY_TOLERANCE=5
-
-      # --- 社會演化 (新增) ---
-      - MIGRATION_RATE=0.10 # 提高流動性
-      - CONVERSION_RATE=0.05 # 提高感化率
-      - CONVERSION_REPUTATION_DIFF=2
-
-      # 確保 Python 輸出不被緩存，即時看到日誌
-      - PYTHONUNBUFFERED=1
