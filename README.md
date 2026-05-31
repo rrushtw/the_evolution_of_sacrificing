@@ -37,9 +37,9 @@ remains, or the population settles into a stable mix.
 
 ---
 
-## 🧠 The 10 Strategies
+## 🧠 The 14 Strategies
 
-Three controls + seven hypothesis-testers. **None** of them can see what
+Three controls + eleven hypothesis-testers. **None** of them can see what
 *type* another agent is — they only observe behavior and reputation.
 
 ### Controls (the corners of the space)
@@ -50,7 +50,7 @@ Three controls + seven hypothesis-testers. **None** of them can see what
 | 😈 **Cheater** | Always `RUN`. Pure defector baseline. |
 | 🎲 **Chaotic** | 50/50 coin flip. Noise floor. |
 
-### Reputation-driven
+### Reputation-driven (use the public Standing label only)
 
 | Strategy | Behavior |
 | :--- | :--- |
@@ -58,24 +58,37 @@ Three controls + seven hypothesis-testers. **None** of them can see what
 | 🔮 **Prophet** | Deep forgiver — helps anyone with *any* `NOTIFY` in their public log. |
 | 🔨 **Jacobin** | Public Grim Trigger — one `RUN` ever recorded = no help, forever. |
 
-### History-driven
+### Private-memory (look up `opponent_history` for this specific opponent)
 
 | Strategy | Behavior |
 | :--- | :--- |
 | 🪞 **Simpleton** | Private Tit-for-Tat — mirror what this specific opponent did to me last time. |
-| 🤝 **Samaritan** | Private TFT + 10% random forgiveness (noise resilience). |
+| 🤝 **Samaritan** | Private TFT + 10% random forgiveness (breaks noise-induced spirals). |
+| ⛓️ **Grudger** | Private Grim Trigger — one `RUN` against me ever = no help, forever (the personal counterpart to Jacobin). |
+| 🌿 **TitForTwoTats** | Forgiving TFT — only retaliate after *two consecutive* `RUN`s from the same opponent (treats the first as possible noise). |
+| 🧠 **Pavlov** | Win-Stay, Lose-Shift — joint outcome with this opponent decides whether to repeat or flip my last action (Nowak & Sigmund 1993, adapted). |
+
+### Public-memory (read the opponent's own public log)
+
+| Strategy | Behavior |
+| :--- | :--- |
 | 🧭 **Pragmatist** | Public TFT — mirror the opponent's most recent public action. |
 
-### Exploiter
+### Exploiters
 
 | Strategy | Behavior |
 | :--- | :--- |
 | 🎩 **Politician** | Sucker hunter — `RUN` against opponents whose public log is dominated by `NOTIFY` (test: can unconditional cooperators be parasitized even under Standing?). |
+| 🦊 **Prober** | Probe-and-adapt predator — `RUN` for the first 3 spotter rounds against each opponent; if they retaliate, switch to private TFT, otherwise keep exploiting. |
 
-> Two earlier strategies (`Xenophobe`, `Commoner`) were removed: the first
-> relied on `isinstance(opponent, Xenophobe)` to recognize kin (DNA cheat,
-> violates the "unknown friend/foe" premise); the second relied on
-> reputation tiers that don't exist under binary Standing.
+> Three earlier candidates were removed/skipped on purpose:
+> - **Xenophobe**: relied on `isinstance(opponent, Xenophobe)` to recognize
+>   kin — DNA cheat, violates the "unknown friend/foe" premise.
+> - **Commoner**: required reputation tiers (LEGEND / TRUSTED / SUSPICIOUS …)
+>   that don't exist under binary Standing.
+> - **Loner**: was meant to be "unconditional `RUN` even toward same-type",
+>   but with all `type()` checks removed, same-type detection no longer
+>   exists for anyone — Loner is now indistinguishable from Cheater.
 
 ---
 
