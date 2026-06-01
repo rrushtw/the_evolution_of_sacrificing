@@ -88,6 +88,12 @@ class GameConfig:
     # BLIND_PRIVATE: per-opponent memory is never recorded (private history ablated).
     BLIND_PRIVATE = os.getenv("BLIND_PRIVATE", "0") == "1"
 
+    # --- Reproducibility ---
+    # RANDOM_SEED: if set, main() seeds the global RNG once for a reproducible
+    # single run. Unset (default) = fresh randomness each run. (The batch
+    # experiment seeds per-replicate itself; see experiments/phase_sweep.py.)
+    RANDOM_SEED = int(os.getenv("RANDOM_SEED")) if os.getenv("RANDOM_SEED") else None
+
     # --- Stability ---
     # Stable = every species' count has fluctuated by ≤ TOLERANCE for the
     # last THRESHOLD generations. (Species-set-only stability is too lax —

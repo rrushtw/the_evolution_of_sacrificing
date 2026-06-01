@@ -28,7 +28,10 @@ class Network:
     def __init__(self, agents, avg_degree, assortment):
         self.assortment = assortment
         self.contacts: dict = {a: set() for a in agents}
-        self._seed(list(agents), avg_degree)
+        # Cached node list so draw/rewire are O(1) amortized, not O(N) — this
+        # is what keeps high-churn runs (and 30× batch sweeps) tractable.
+        self._nodes: list = list(agents)
+        self._seed(self._nodes, avg_degree)
 
     # ------------------------------------------------------------------
     # Construction / turnover
@@ -50,10 +53,12 @@ class Network:
         for nb in list(self.contacts.get(agent, ())):
             self.contacts[nb].discard(agent)
         self.contacts.pop(agent, None)
+        self._nodes.remove(agent)
 
     def on_birth(self, agent, degree):
         """Add a newborn (a stranger entering the network) with fresh ties."""
         self.contacts[agent] = set()
+        self._nodes.append(agent)
         for _ in range(degree):
             self._rewire(agent)
 
@@ -63,7 +68,7 @@ class Network:
 
     def draw_encounter(self):
         """Pick a random agent and one of its contacts. Returns (a, b) or None."""
-        a = random.choice(list(self.contacts.keys()))
+        a = random.choice(self._nodes)
         if not self.contacts[a]:
             self._rewire(a)
             if not self.contacts[a]:
@@ -102,16 +107,29 @@ class Network:
         self.contacts[b].discard(a)
 
     def _rewire(self, a):
-        """Give `a` one new contact, preferring same Standing w.p. assortment."""
-        candidates = [x for x in self.contacts
-                      if x is not a and x not in self.contacts[a]]
-        if not candidates:
+        """
+        Give `a` one new contact, preferring same Standing w.p. assortment.
+
+        Rejection sampling over the cached node list — O(1) amortized because
+        degree ≪ N, so a random pick is almost always a valid non-contact.
+        """
+        if len(self._nodes) <= len(self.contacts[a]) + 1:
+            return  # already tied to everyone available
+        prefer_same = self.assortment > 0 and random.random() < self.assortment
+        for _ in range(24):
+            cand = random.choice(self._nodes)
+            if cand is a or cand in self.contacts[a]:
+                continue
+            if prefer_same and cand.reputation != a.reputation:
+                continue
+            self._link(a, cand)
             return
-        if self.assortment > 0 and random.random() < self.assortment:
-            same = [x for x in candidates if x.reputation == a.reputation]
-            if same:
-                candidates = same
-        self._link(a, random.choice(candidates))
+        # Fallback: drop the same-Standing preference rather than fail.
+        for _ in range(24):
+            cand = random.choice(self._nodes)
+            if cand is not a and cand not in self.contacts[a]:
+                self._link(a, cand)
+                return
 
     def _edges(self):
         """Snapshot of undirected edges as (a, b) pairs, each once."""

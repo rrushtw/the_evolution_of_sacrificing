@@ -212,15 +212,49 @@ sacrifice to pay*.
 
 ---
 
+## 🔬 Reproducible experiments
+
+`experiments/phase_sweep.py` runs the full **CHURN × KNOCKOUT × REPS** grid in a
+single container call, seeds each replicate reproducibly, and writes aggregated
+**mean ± 95% CI** to the console and to `output/phase_sweep_<timestamp>.json`:
+
+```bash
+docker compose run --rm simulator python -u experiments/phase_sweep.py
+```
+
+All knobs are env vars (override with `-e`):
+
+| Var | Default | Meaning |
+| :--- | :--- | :--- |
+| `REPS` | `30` | replicates per cell (≥30 for tight CIs) |
+| `BATCH_GENERATIONS` | `300` | rounds per run |
+| `CHURN_GRID` | `0.0,0.1,0.3,0.6,1.0` | village → commuter → metropolis |
+| `RANDOM_SEED` | `12345` | base seed; replicate *i* uses `RANDOM_SEED + i`. Set it on `main.py` too for a reproducible single run. |
+| `JOBS` | all cores | parallel worker processes — replicates run concurrently, so a 30-rep grid is minutes not hours |
+
+Quick smoke test (small + fast):
+
+```bash
+docker compose run --rm -e REPS=8 -e BATCH_GENERATIONS=120 \
+    -e CHURN_GRID=0.0,0.3,1.0 simulator python -u experiments/phase_sweep.py
+```
+
+The headline result: knocking out **public reputation** collapses cooperation in
+a churning metropolis but not in a stable village — quantifying the handoff from
+direct (private-history) to indirect (reputation) reciprocity as society churns.
+
+---
+
 ## 🛣️ Project Phases
 
 This repo is staged. Phase 1 is what you're reading.
 
 | Phase | Status | Focus |
 | :--- | :--- | :--- |
-| **Phase 1** — Cross-individual | ✅ Engine + strategies done | Well-mixed, no spatial structure, no species — pure individual-level test of "niceness without kinship" |
-| **Phase 2** — Cross-species | 🔜 | Add `species` + `pair_kind` payoff matrix to test interspecies mutualism vs competition |
-| **Phase 3** — Spatial | 🔜 | Bring back toroidal grid + migration + cultural transmission; see whether spatial structure amplifies or breaks Phase 1's conclusions |
+| **Phase 1** — Individual + reputation | ✅ Done | Death-based selection (Baseline 0) → reputation-biased **assortment** (`r`): quantifies how much clustering it takes for niceness to win (`r* ≈ c/((1−s)b)`) |
+| **Phase 2** — Capital × mobile network | ✅ Done | Replace binary death with graded **capital** + overlapping generations; put interactions on a **mobile social network** with exploitation-driven churn. Unlocks direct (`w`, private history) vs indirect (`q`, reputation) reciprocity and the **village↔metropolis phase map** |
+| **Phase 2.5** — Capital-aware strategies | 🔜 | Expose capital to `decide()`; add strategies that prey on the weak / launder reputation |
+| **Phase 3** — Kin / species | 🔜 | The deliberately-excluded branch: reintroduce genetic relatedness and cross-species payoff matrices |
 
 ---
 

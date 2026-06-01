@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import sys
 import time
 from datetime import datetime
@@ -91,6 +92,8 @@ def _print_header(strategy_types):
 
 
 def main():
+    if GameConfig.RANDOM_SEED is not None:
+        random.seed(GameConfig.RANDOM_SEED)
     strategy_types = load_all_strategies()
     if not strategy_types:
         print("❌ No strategies found in strategies/")
