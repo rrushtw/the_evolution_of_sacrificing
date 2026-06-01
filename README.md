@@ -43,9 +43,9 @@ species remains, or the population settles into a stable mix. Crank
 
 ---
 
-## 🧠 The 14 Strategies
+## 🧠 The 16 Strategies
 
-Three controls + eleven hypothesis-testers. **None** of them can see what
+Three controls + thirteen hypothesis-testers. **None** of them can see what
 *type* another agent is — they only observe behavior and reputation.
 
 ### Controls (the corners of the space)
@@ -86,6 +86,8 @@ Three controls + eleven hypothesis-testers. **None** of them can see what
 | :--- | :--- |
 | 🎩 **Politician** | Sucker hunter — `RUN` against opponents whose public log is dominated by `NOTIFY` (test: can unconditional cooperators be parasitized even under Standing?). |
 | 🦊 **Prober** | Probe-and-adapt predator — `RUN` for the first 3 spotter rounds against each opponent; if they retaliate, switch to private TFT, otherwise keep exploiting. |
+| 🏘️ **Clannish** | Trust the familiar — `NOTIFY` anyone it shares private history with, `RUN` on strangers. A model neighbour in a village, a serial exploiter in a churning metropolis: a direct probe of the private/public divide. |
+| 🧼 **Whitewasher** | Reputation launderer — `RUN` while its own Standing is GOOD (spend the good name), `NOTIFY` once BAD (scrub back). Attacks the reputation channel itself; most dangerous where reputation is load-bearing. |
 
 > Three earlier candidates were removed/skipped on purpose:
 > - **Xenophobe**: relied on `isinstance(opponent, Xenophobe)` to recognize
