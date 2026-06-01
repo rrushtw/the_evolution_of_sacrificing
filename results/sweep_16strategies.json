@@ -1,0 +1,662 @@
+{
+  "config": {
+    "reps": 30,
+    "generations": 300,
+    "base_seed": 12345,
+    "churn_grid": [
+      0.0,
+      0.1,
+      0.3,
+      0.6,
+      1.0
+    ],
+    "knockouts": [
+      "none",
+      "-reputation",
+      "-private"
+    ],
+    "strategies": 16,
+    "N": 160,
+    "duration_seconds": 1352.6
+  },
+  "cells": {
+    "churn=0.0|none": {
+      "metrics": {
+        "nice": {
+          "mean": 0.799,
+          "std": 0.2822,
+          "ci95": 0.101
+        },
+        "capital_mean": {
+          "mean": 2.5765,
+          "std": 0.1035,
+          "ci95": 0.037
+        },
+        "gini": {
+          "mean": 0.309,
+          "std": 0.0135,
+          "ci95": 0.0048
+        },
+        "reenc": {
+          "mean": 0.6506,
+          "std": 0.1026,
+          "ci95": 0.0367
+        },
+        "expl": {
+          "mean": 8.0667,
+          "std": 8.128,
+          "ci95": 2.9086
+        },
+        "top_winner": "Pavlov"
+      },
+      "winners": {
+        "Prophet": 4,
+        "TitForTwoTats": 3,
+        "Pavlov": 7,
+        "Altruist": 4,
+        "Sheriff": 5,
+        "Samaritan": 1,
+        "Cheater": 1,
+        "Whitewasher": 2,
+        "Simpleton": 2,
+        "Pragmatist": 1
+      }
+    },
+    "churn=0.0|-reputation": {
+      "metrics": {
+        "nice": {
+          "mean": 0.8008,
+          "std": 0.2899,
+          "ci95": 0.1038
+        },
+        "capital_mean": {
+          "mean": 2.5597,
+          "std": 0.1069,
+          "ci95": 0.0382
+        },
+        "gini": {
+          "mean": 0.3117,
+          "std": 0.0169,
+          "ci95": 0.0061
+        },
+        "reenc": {
+          "mean": 0.6515,
+          "std": 0.0617,
+          "ci95": 0.0221
+        },
+        "expl": {
+          "mean": 4.7,
+          "std": 5.2137,
+          "ci95": 1.8657
+        },
+        "top_winner": "Altruist"
+      },
+      "winners": {
+        "Samaritan": 2,
+        "Jacobin": 4,
+        "Whitewasher": 1,
+        "Altruist": 7,
+        "TitForTwoTats": 3,
+        "Grudger": 3,
+        "Simpleton": 4,
+        "Prophet": 2,
+        "Politician": 1,
+        "Sheriff": 1,
+        "Pragmatist": 1,
+        "Pavlov": 1
+      }
+    },
+    "churn=0.0|-private": {
+      "metrics": {
+        "nice": {
+          "mean": 0.6721,
+          "std": 0.3106,
+          "ci95": 0.1111
+        },
+        "capital_mean": {
+          "mean": 2.5493,
+          "std": 0.1136,
+          "ci95": 0.0407
+        },
+        "gini": {
+          "mean": 0.3097,
+          "std": 0.0157,
+          "ci95": 0.0056
+        },
+        "reenc": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0
+        },
+        "expl": {
+          "mean": 8.2667,
+          "std": 13.141,
+          "ci95": 4.7024
+        },
+        "top_winner": "Pragmatist"
+      },
+      "winners": {
+        "TitForTwoTats": 3,
+        "Simpleton": 5,
+        "Grudger": 2,
+        "Pragmatist": 6,
+        "Pavlov": 2,
+        "Altruist": 3,
+        "Samaritan": 2,
+        "Prophet": 2,
+        "Sheriff": 2,
+        "Chaotic": 1,
+        "Politician": 1,
+        "Whitewasher": 1
+      }
+    },
+    "churn=0.1|none": {
+      "metrics": {
+        "nice": {
+          "mean": 0.755,
+          "std": 0.2724,
+          "ci95": 0.0975
+        },
+        "capital_mean": {
+          "mean": 2.7279,
+          "std": 0.0973,
+          "ci95": 0.0348
+        },
+        "gini": {
+          "mean": 0.305,
+          "std": 0.0141,
+          "ci95": 0.0051
+        },
+        "reenc": {
+          "mean": 0.3129,
+          "std": 0.0475,
+          "ci95": 0.017
+        },
+        "expl": {
+          "mean": 8.9,
+          "std": 12.9704,
+          "ci95": 4.6414
+        },
+        "top_winner": "Grudger"
+      },
+      "winners": {
+        "Politician": 2,
+        "Prophet": 3,
+        "Altruist": 2,
+        "Pragmatist": 4,
+        "Pavlov": 1,
+        "Grudger": 7,
+        "Sheriff": 2,
+        "TitForTwoTats": 4,
+        "Samaritan": 2,
+        "Simpleton": 2,
+        "Clannish": 1
+      }
+    },
+    "churn=0.1|-reputation": {
+      "metrics": {
+        "nice": {
+          "mean": 0.7223,
+          "std": 0.3254,
+          "ci95": 0.1164
+        },
+        "capital_mean": {
+          "mean": 2.741,
+          "std": 0.1342,
+          "ci95": 0.048
+        },
+        "gini": {
+          "mean": 0.3066,
+          "std": 0.0163,
+          "ci95": 0.0058
+        },
+        "reenc": {
+          "mean": 0.3275,
+          "std": 0.0483,
+          "ci95": 0.0173
+        },
+        "expl": {
+          "mean": 9.1333,
+          "std": 11.057,
+          "ci95": 3.9567
+        },
+        "top_winner": "Politician"
+      },
+      "winners": {
+        "Whitewasher": 1,
+        "Samaritan": 2,
+        "Sheriff": 4,
+        "Grudger": 4,
+        "Pragmatist": 2,
+        "Prophet": 1,
+        "Politician": 5,
+        "Simpleton": 4,
+        "Altruist": 3,
+        "Pavlov": 2,
+        "TitForTwoTats": 2
+      }
+    },
+    "churn=0.1|-private": {
+      "metrics": {
+        "nice": {
+          "mean": 0.6608,
+          "std": 0.3755,
+          "ci95": 0.1344
+        },
+        "capital_mean": {
+          "mean": 2.7415,
+          "std": 0.1018,
+          "ci95": 0.0364
+        },
+        "gini": {
+          "mean": 0.3081,
+          "std": 0.0152,
+          "ci95": 0.0054
+        },
+        "reenc": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0
+        },
+        "expl": {
+          "mean": 12.0333,
+          "std": 16.1255,
+          "ci95": 5.7705
+        },
+        "top_winner": "Pragmatist"
+      },
+      "winners": {
+        "TitForTwoTats": 2,
+        "Politician": 3,
+        "Whitewasher": 2,
+        "Pavlov": 3,
+        "Pragmatist": 6,
+        "Samaritan": 2,
+        "Grudger": 4,
+        "Simpleton": 4,
+        "Altruist": 2,
+        "Sheriff": 2
+      }
+    },
+    "churn=0.3|none": {
+      "metrics": {
+        "nice": {
+          "mean": 0.5392,
+          "std": 0.4308,
+          "ci95": 0.1541
+        },
+        "capital_mean": {
+          "mean": 2.6694,
+          "std": 0.1647,
+          "ci95": 0.0589
+        },
+        "gini": {
+          "mean": 0.319,
+          "std": 0.0197,
+          "ci95": 0.007
+        },
+        "reenc": {
+          "mean": 0.0619,
+          "std": 0.0264,
+          "ci95": 0.0095
+        },
+        "expl": {
+          "mean": 17.0333,
+          "std": 16.5206,
+          "ci95": 5.9118
+        },
+        "top_winner": "Clannish"
+      },
+      "winners": {
+        "Clannish": 5,
+        "Sheriff": 4,
+        "Whitewasher": 2,
+        "Grudger": 1,
+        "Pragmatist": 2,
+        "Cheater": 4,
+        "Simpleton": 2,
+        "Politician": 2,
+        "TitForTwoTats": 1,
+        "Pavlov": 3,
+        "Altruist": 1,
+        "Prophet": 2,
+        "Samaritan": 1
+      }
+    },
+    "churn=0.3|-reputation": {
+      "metrics": {
+        "nice": {
+          "mean": 0.0125,
+          "std": 0.035,
+          "ci95": 0.0125
+        },
+        "capital_mean": {
+          "mean": 2.8301,
+          "std": 0.1429,
+          "ci95": 0.0511
+        },
+        "gini": {
+          "mean": 0.3196,
+          "std": 0.0168,
+          "ci95": 0.006
+        },
+        "reenc": {
+          "mean": 0.0402,
+          "std": 0.0117,
+          "ci95": 0.0042
+        },
+        "expl": {
+          "mean": 23.0,
+          "std": 11.1665,
+          "ci95": 3.9959
+        },
+        "top_winner": "Prober"
+      },
+      "winners": {
+        "Prober": 12,
+        "Clannish": 9,
+        "Cheater": 7,
+        "Chaotic": 1,
+        "Whitewasher": 1
+      }
+    },
+    "churn=0.3|-private": {
+      "metrics": {
+        "nice": {
+          "mean": 0.4623,
+          "std": 0.4446,
+          "ci95": 0.1591
+        },
+        "capital_mean": {
+          "mean": 2.731,
+          "std": 0.1441,
+          "ci95": 0.0516
+        },
+        "gini": {
+          "mean": 0.3154,
+          "std": 0.0165,
+          "ci95": 0.0059
+        },
+        "reenc": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0
+        },
+        "expl": {
+          "mean": 17.7,
+          "std": 16.9037,
+          "ci95": 6.0489
+        },
+        "top_winner": "Clannish"
+      },
+      "winners": {
+        "Cheater": 3,
+        "Clannish": 7,
+        "Samaritan": 3,
+        "Sheriff": 1,
+        "Chaotic": 3,
+        "Pragmatist": 2,
+        "Prophet": 2,
+        "Grudger": 2,
+        "Whitewasher": 1,
+        "Altruist": 1,
+        "TitForTwoTats": 2,
+        "Pavlov": 1,
+        "Jacobin": 1,
+        "Prober": 1
+      }
+    },
+    "churn=0.6|none": {
+      "metrics": {
+        "nice": {
+          "mean": 0.3098,
+          "std": 0.3684,
+          "ci95": 0.1318
+        },
+        "capital_mean": {
+          "mean": 2.7359,
+          "std": 0.1112,
+          "ci95": 0.0398
+        },
+        "gini": {
+          "mean": 0.3217,
+          "std": 0.0126,
+          "ci95": 0.0045
+        },
+        "reenc": {
+          "mean": 0.0456,
+          "std": 0.0191,
+          "ci95": 0.0068
+        },
+        "expl": {
+          "mean": 22.9,
+          "std": 15.7597,
+          "ci95": 5.6395
+        },
+        "top_winner": "Prober"
+      },
+      "winners": {
+        "Cheater": 3,
+        "Whitewasher": 5,
+        "Prober": 7,
+        "Samaritan": 1,
+        "Clannish": 3,
+        "Sheriff": 2,
+        "Grudger": 1,
+        "Pragmatist": 3,
+        "Simpleton": 1,
+        "Altruist": 1,
+        "Pavlov": 1,
+        "Prophet": 1,
+        "TitForTwoTats": 1
+      }
+    },
+    "churn=0.6|-reputation": {
+      "metrics": {
+        "nice": {
+          "mean": 0.0073,
+          "std": 0.0399,
+          "ci95": 0.0143
+        },
+        "capital_mean": {
+          "mean": 2.7919,
+          "std": 0.1176,
+          "ci95": 0.0421
+        },
+        "gini": {
+          "mean": 0.3227,
+          "std": 0.0176,
+          "ci95": 0.0063
+        },
+        "reenc": {
+          "mean": 0.0415,
+          "std": 0.0146,
+          "ci95": 0.0052
+        },
+        "expl": {
+          "mean": 25.4667,
+          "std": 10.2981,
+          "ci95": 3.6851
+        },
+        "top_winner": "Clannish"
+      },
+      "winners": {
+        "Clannish": 12,
+        "Cheater": 9,
+        "Prober": 5,
+        "Whitewasher": 3,
+        "Chaotic": 1
+      }
+    },
+    "churn=0.6|-private": {
+      "metrics": {
+        "nice": {
+          "mean": 0.4881,
+          "std": 0.4163,
+          "ci95": 0.149
+        },
+        "capital_mean": {
+          "mean": 2.744,
+          "std": 0.1443,
+          "ci95": 0.0516
+        },
+        "gini": {
+          "mean": 0.3147,
+          "std": 0.0158,
+          "ci95": 0.0057
+        },
+        "reenc": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0
+        },
+        "expl": {
+          "mean": 15.9667,
+          "std": 13.8452,
+          "ci95": 4.9544
+        },
+        "top_winner": "Clannish"
+      },
+      "winners": {
+        "Clannish": 6,
+        "Prober": 1,
+        "TitForTwoTats": 2,
+        "Whitewasher": 4,
+        "Pragmatist": 2,
+        "Prophet": 4,
+        "Pavlov": 2,
+        "Grudger": 3,
+        "Sheriff": 3,
+        "Cheater": 1,
+        "Simpleton": 1,
+        "Samaritan": 1
+      }
+    },
+    "churn=1.0|none": {
+      "metrics": {
+        "nice": {
+          "mean": 0.5262,
+          "std": 0.4212,
+          "ci95": 0.1507
+        },
+        "capital_mean": {
+          "mean": 2.7084,
+          "std": 0.1453,
+          "ci95": 0.052
+        },
+        "gini": {
+          "mean": 0.3184,
+          "std": 0.0141,
+          "ci95": 0.0051
+        },
+        "reenc": {
+          "mean": 0.0535,
+          "std": 0.0261,
+          "ci95": 0.0093
+        },
+        "expl": {
+          "mean": 18.7,
+          "std": 15.2183,
+          "ci95": 5.4458
+        },
+        "top_winner": "Clannish"
+      },
+      "winners": {
+        "Sheriff": 3,
+        "Pragmatist": 1,
+        "Cheater": 3,
+        "Grudger": 2,
+        "Simpleton": 1,
+        "Prophet": 3,
+        "Prober": 2,
+        "Clannish": 4,
+        "Chaotic": 3,
+        "Samaritan": 3,
+        "TitForTwoTats": 4,
+        "Whitewasher": 1
+      }
+    },
+    "churn=1.0|-reputation": {
+      "metrics": {
+        "nice": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0
+        },
+        "capital_mean": {
+          "mean": 2.8264,
+          "std": 0.111,
+          "ci95": 0.0397
+        },
+        "gini": {
+          "mean": 0.3181,
+          "std": 0.0167,
+          "ci95": 0.006
+        },
+        "reenc": {
+          "mean": 0.0408,
+          "std": 0.0164,
+          "ci95": 0.0059
+        },
+        "expl": {
+          "mean": 20.2667,
+          "std": 7.8518,
+          "ci95": 2.8097
+        },
+        "top_winner": "Prober"
+      },
+      "winners": {
+        "Prober": 16,
+        "Clannish": 8,
+        "Cheater": 6
+      }
+    },
+    "churn=1.0|-private": {
+      "metrics": {
+        "nice": {
+          "mean": 0.4258,
+          "std": 0.4196,
+          "ci95": 0.1501
+        },
+        "capital_mean": {
+          "mean": 2.6948,
+          "std": 0.1546,
+          "ci95": 0.0553
+        },
+        "gini": {
+          "mean": 0.3192,
+          "std": 0.0164,
+          "ci95": 0.0059
+        },
+        "reenc": {
+          "mean": 0.0,
+          "std": 0.0,
+          "ci95": 0.0
+        },
+        "expl": {
+          "mean": 21.1333,
+          "std": 17.5179,
+          "ci95": 6.2687
+        },
+        "top_winner": "Clannish"
+      },
+      "winners": {
+        "Chaotic": 4,
+        "Sheriff": 3,
+        "Clannish": 6,
+        "Grudger": 1,
+        "Prober": 4,
+        "Pavlov": 2,
+        "Prophet": 1,
+        "Samaritan": 1,
+        "Pragmatist": 1,
+        "Cheater": 1,
+        "Altruist": 2,
+        "TitForTwoTats": 1,
+        "Jacobin": 1,
+        "Politician": 1,
+        "Whitewasher": 1
+      }
+    }
+  }
+}

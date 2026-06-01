@@ -1,0 +1,43 @@
+Batch phase-sweep | strategies=14 N=140 | REPS=30 GENS=300 base_seed=12345 jobs=22
+churn grid: [0.0, 0.1, 0.3, 0.6, 1.0] | knockouts: ['none', '-reputation', '-private']
+total runs = 450
+
+  22/450 runs done (1s)
+  44/450 runs done (1s)
+  66/450 runs done (2s)
+  88/450 runs done (2s)
+  110/450 runs done (4s)
+  132/450 runs done (5s)
+  154/450 runs done (7s)
+  176/450 runs done (8s)
+  198/450 runs done (51s)
+  220/450 runs done (79s)
+  242/450 runs done (111s)
+  264/450 runs done (147s)
+  286/450 runs done (231s)
+  308/450 runs done (295s)
+  330/450 runs done (374s)
+  352/450 runs done (443s)
+  374/450 runs done (579s)
+  396/450 runs done (696s)
+  418/450 runs done (792s)
+  440/450 runs done (907s)
+  450/450 runs done (938s)
+
+=== nice%  (mean ± 95% CI, n=30) ===
+churn |             none |      -reputation |         -private |
+  0.0 |    79% ±  12% |    78% ±  10% |    72% ±  11% |
+  0.1 |    74% ±  13% |    71% ±  11% |    68% ±  12% |
+  0.3 |    57% ±  16% |     2% ±   3% |    42% ±  16% |
+  0.6 |    54% ±  16% |     7% ±   9% |    45% ±  16% |
+  1.0 |    59% ±  15% |     9% ±  10% |    54% ±  17% |
+
+=== no-knockout society profile (mean ± 95% CI, n=30) ===
+churn |   reenc%    |   nice%     |   gini      | expl/round
+  0.0 |   65%± 3% |   79%±12% | 0.31±0.01 |   4.9± 2.8
+  0.1 |   30%± 2% |   74%±13% | 0.30±0.00 |  12.6± 5.7
+  0.3 |    6%± 1% |   57%±16% | 0.32±0.01 |  14.1± 4.2
+  0.6 |    7%± 1% |   54%±16% | 0.32±0.01 |   9.3± 3.6
+  1.0 |    7%± 1% |   59%±15% | 0.32±0.01 |  11.3± 4.2
+
+Saved → ./output/phase_sweep_20260601_074613.json  (937.6s)
