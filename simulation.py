@@ -48,18 +48,47 @@ def _build_population(
     return population
 
 
-def _breed(
-    survivors: list[BaseStrategy], target_size: int
+def _repopulate(
+    survivors: list[BaseStrategy], n_deaths: int
 ) -> list[BaseStrategy]:
     """
-    Refill the population to `target_size` by cloning survivors.
+    Breed `n_deaths` newborns to replace the dead, keeping the population at N.
 
-    Parents are drawn with replacement, so a type's share of the next
-    generation is proportional to how many of it survived — survival is the
-    selection signal. Each newborn inherits its parent's Standing.
+    Parents are drawn with replacement, weighted by CAPITAL — the rich /
+    influential reproduce more, so capital is the selection signal (the
+    'influence gap' driving who propagates). Each newborn inherits its
+    parent's Standing; survivors all have capital > 0 (bankrupts already died).
     """
-    parents = random.choices(survivors, k=target_size)
+    if n_deaths <= 0:
+        return []
+    weights = [max(0.0, s.capital) for s in survivors]
+    if sum(weights) <= 0:
+        weights = None  # degenerate: fall back to uniform
+    parents = random.choices(survivors, weights=weights, k=n_deaths)
     return [parent.spawn_offspring() for parent in parents]
+
+
+def _gini(values: list[float]) -> float:
+    """Gini coefficient (0 = equal, →1 = unequal). Assumes non-negative values."""
+    vals = sorted(values)
+    n = len(vals)
+    total = sum(vals)
+    if n == 0 or total <= 0:
+        return 0.0
+    weighted = sum((2 * (i + 1) - n - 1) * v for i, v in enumerate(vals))
+    return weighted / (n * total)
+
+
+def _capital_stats(population: Iterable[BaseStrategy]) -> dict:
+    """Capital + age summary — the observable 'influence gap' of the society."""
+    pop = list(population)
+    n = len(pop) or 1
+    caps = [a.capital for a in pop]
+    return {
+        "capital_mean": round(sum(caps) / n, 4),
+        "capital_gini": round(_gini(caps), 4),
+        "age_mean": round(sum(a.age for a in pop) / n, 2),
+    }
 
 
 def _count_by_type(population: Iterable[BaseStrategy]) -> collections.Counter:
@@ -92,8 +121,7 @@ def _max_swing(window: deque) -> int:
 def run_evolution(
     strategy_types: list[Type[BaseStrategy]],
     initial_copies: int = GameConfig.INITIAL_COPIES,
-    survival_floor_frac: float = GameConfig.SURVIVAL_FLOOR_FRAC,
-    max_encounters_per_agent: int = GameConfig.MAX_ENCOUNTERS_PER_AGENT,
+    encounters_per_agent: int = GameConfig.ENCOUNTERS_PER_AGENT,
     assortment: float = GameConfig.ASSORTMENT,
     noise: float = GameConfig.NOISE_RATE,
     stability_threshold: int = GameConfig.STABILITY_THRESHOLD,
@@ -104,12 +132,13 @@ def run_evolution(
     """
     Run a full evolutionary simulation.
 
-    Each generation:
-      1. Run a brutal one-shot tournament (engine.run_generation): agents
-         die from the survival roll until the living pool hits the floor.
-      2. The survivors breed back up to N (carrying capacity); each newborn
-         inherits only its parent's Standing. The dead leave no descendants.
-      3. Track extinctions and stability.
+    Each round (= one "generation" tick for the UI/stability machinery):
+      1. engine.run_round: well-mixed encounters nudge everyone's capital.
+      2. Every agent recovers a little toward baseline and ages one round.
+      3. Mortality: agents die of old age (rising with age) or bankruptcy.
+      4. Each death is replaced by an offspring of a capital-weighted parent,
+         inheriting its Standing — population stays at N (overlapping gens).
+      5. Track extinctions, capital/age stats, and stability.
 
     Termination:
       - Stable: a window of the last `stability_threshold` generations, in
@@ -118,7 +147,7 @@ def run_evolution(
         AND the counts to settle, so we don't stop while populations are
         still swinging.)
       - Only one strategy type remains (winner), OR
-      - Everyone died in a generation (extinct), OR
+      - Everyone died in one round (extinct — rare), OR
       - `max_generations` reached.
 
     `on_generation(generation, snapshot)` is called every generation with a
@@ -126,7 +155,6 @@ def run_evolution(
     itself is silent — the caller owns all UI.
     """
     population = _build_population(strategy_types, initial_copies)
-    target_size = len(population)
 
     counts = _count_by_type(population)
     surviving = set(counts.keys())
@@ -145,6 +173,7 @@ def run_evolution(
         "reputation": _reputation_distribution(population),
         "max_swing": 0,
         "window_fill": len(stability_window),
+        **_capital_stats(population),
     }
     history.append(initial_snapshot)
     if on_generation:
@@ -154,16 +183,31 @@ def run_evolution(
         generation += 1
         gen_started = time.time()
 
-        survivors = engine.run_generation(
+        # 1. Encounters mutate everyone's capital (no deaths here).
+        engine.run_round(
             population,
             noise=noise,
-            survival_floor_frac=survival_floor_frac,
-            max_encounters_per_agent=max_encounters_per_agent,
+            encounters_per_agent=encounters_per_agent,
             assortment=assortment,
         )
 
+        # 2. Recover toward baseline + age one round.
+        for agent in population:
+            agent.recover()
+            agent.age += 1
+
+        # 3. Mortality: old age (rising with age) or bankruptcy.
+        survivors, deaths = [], 0
+        for agent in population:
+            death_prob = min(1.0, GameConfig.BASE_DEATH
+                             + GameConfig.AGE_DEATH * agent.age)
+            if agent.is_bankrupt() or random.random() < death_prob:
+                deaths += 1
+            else:
+                survivors.append(agent)
+
         if not survivors:
-            # Total wipe-out — nobody left to breed the next generation.
+            # Everyone died this round — rare total wipe-out.
             stopped_reason = "extinct"
             counts = collections.Counter()
             surviving = set()
@@ -178,16 +222,16 @@ def run_evolution(
                 "max_swing": 0,
                 "window_fill": len(stability_window),
                 "duration_seconds": round(time.time() - gen_started, 3),
+                "capital_mean": 0, "capital_gini": 0, "age_mean": 0,
             }
             history.append(snapshot)
             if on_generation:
                 on_generation(generation, snapshot)
             break
 
-        # Selection + reproduction: only survivors breed, cloning back up to
-        # carrying capacity. Composition follows who survived; each newborn
-        # inherits its parent's Standing (the lone bit that crosses a gen).
-        population = _breed(survivors, target_size)
+        # 4. Replace each death with an offspring of a capital-weighted parent;
+        #    population stays at N (overlapping generations).
+        population = survivors + _repopulate(survivors, deaths)
 
         counts = _count_by_type(population)
         surviving = set(counts.keys())
@@ -208,6 +252,7 @@ def run_evolution(
             "max_swing": max_swing,
             "window_fill": len(stability_window),
             "duration_seconds": round(time.time() - gen_started, 3),
+            **_capital_stats(population),
         }
         history.append(snapshot)
         if on_generation:

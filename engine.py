@@ -1,5 +1,4 @@
 import random
-from math import ceil
 
 from definitions import Action, GameConfig, Reputation
 from base_strategy import BaseStrategy
@@ -33,23 +32,18 @@ def _listener_outcome(spotter_action: Action | None, noise: float) -> float:
     return GameConfig.SURVIVAL_LISTENER_IGNORANT
 
 
-def _resolve_interaction(
-    s1: BaseStrategy, s2: BaseStrategy, noise: float
-) -> tuple[bool, bool]:
+def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
     """
     One Alarm Call round between two agents.
 
     Both independently roll for whether they detect danger; whoever spots
     makes a moral choice (NOTIFY/RUN). Internal noise may flip that choice
-    before it manifests in the world. Survival depends on each agent's own
-    role + (for listeners) the spotter's actual action + external noise.
-    Reputation only updates for agents who actually had a choice to make.
-
-    The survival probability is a literal life-or-death roll: each agent
-    rolls once and dies if it fails. Returns (s1_died, s2_died) so the
-    caller can remove the dead from the living pool immediately — a single
-    unlucky encounter can end an individual. This is the model's core
-    cost: death, not a soft score penalty.
+    before it manifests in the world. The outcome is a graded change in each
+    agent's CAPITAL, not a life-or-death roll: the payoff (fraction kept) maps
+    to delta = payoff − 1, so a missed warning (IGNORANT, 0.05) is a heavy
+    −0.95 hit ('lost your shirt'), NOTIFY a small −0.1 cost, and being warned
+    or running safely costs nothing. Capital recovers slowly elsewhere; ruin
+    is rare. Reputation only updates for agents who actually had a choice.
     """
     p_spot = GameConfig.PROB_SPOT_DANGER
 
@@ -94,24 +88,23 @@ def _resolve_interaction(
         opponent_unique_id=s2.unique_id,
         my_action=s1_action,
         opponent_action=s2_action,
-        survival_score=s1_survival,
     )
     s2.record_round(
         opponent_unique_id=s1.unique_id,
         my_action=s2_action,
         opponent_action=s1_action,
-        survival_score=s2_survival,
     )
+
+    # Graded capital change: payoff is the fraction kept, so the loss is
+    # (payoff − 1). Being warned / running safely → 0; NOTIFY → −0.1; a missed
+    # warning → −0.95. Hurts, but you usually live to recover.
+    s1.apply_capital(s1_survival - 1.0)
+    s2.apply_capital(s2_survival - 1.0)
 
     if s1_spots:
         s1.update_reputation(s1_action, s2_rep_seen_by_s1)
     if s2_spots:
         s2.update_reputation(s2_action, s1_rep_seen_by_s2)
-
-    # Life-or-death roll: survival probability is the chance to live, not a score.
-    s1_died = random.random() >= s1_survival
-    s2_died = random.random() >= s2_survival
-    return s1_died, s2_died
 
 
 def _draw_pair(living: list[BaseStrategy], assortment: float):
@@ -133,42 +126,23 @@ def _draw_pair(living: list[BaseStrategy], assortment: float):
     return s1, random.choice(pool)
 
 
-def run_generation(
+def run_round(
     population: list[BaseStrategy],
     noise: float,
-    survival_floor_frac: float,
-    max_encounters_per_agent: int,
+    encounters_per_agent: int,
     assortment: float = 0.0,
-) -> list[BaseStrategy]:
+):
     """
-    Run one brutal, well-mixed Alarm Call generation and return the survivors.
+    Run one round of well-mixed Alarm Call encounters, mutating capital.
 
-    Repeatedly draw two living agents at random for a one-shot interaction;
-    each interaction may kill one or both (see _resolve_interaction). The
-    dead leave the living pool at once and can never be drawn again — so an
-    individual's whole generation can end on a single bad encounter.
-
-    The generation stops as soon as the living pool falls to the survival
-    floor (ceil(N * survival_floor_frac)) — capping mortality so the species
-    can persist across many generations instead of collapsing in one. A
-    safety cap of (N * max_encounters_per_agent // 2) interactions ends a
-    placid, low-death generation that never reaches the floor.
-
-    Silent on purpose — the caller owns all UI.
+    Draws (encounters_per_agent × N // 2) random pairs (so each agent plays
+    ~encounters_per_agent times) and resolves each — every interaction nudges
+    both agents' capital. Nobody dies here: aging, mortality and reproduction
+    are the caller's job (see simulation.run_evolution), which keeps the
+    population intact for the whole round. Silent on purpose.
     """
-    living = list(population)
-    n = len(living)
-    floor = max(2, ceil(n * survival_floor_frac))
-    interaction_cap = (n * max_encounters_per_agent) // 2
-
-    for _ in range(interaction_cap):
-        if len(living) <= floor:
-            break
-        s1, s2 = _draw_pair(living, assortment)
-        s1_died, s2_died = _resolve_interaction(s1, s2, noise)
-        if s2_died:
-            living.remove(s2)
-        if s1_died:
-            living.remove(s1)
-
-    return living
+    n = len(population)
+    interactions = (n * encounters_per_agent) // 2
+    for _ in range(interactions):
+        s1, s2 = _draw_pair(population, assortment)
+        _resolve_interaction(s1, s2, noise)

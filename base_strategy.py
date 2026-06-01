@@ -34,8 +34,12 @@ class BaseStrategy(abc.ABC):
         # None = that party didn't spot danger this round.
         self.my_history: list[dict] = []
         self.opponent_history: dict[str, list[dict]] = {}
-        # Sum of survival probabilities across all interactions this generation.
-        self.total_score: float = 0.0
+        # Capital replaces binary life/death: outcomes nudge it up or down,
+        # it recovers slowly toward baseline, and hitting zero = bankruptcy
+        # (a rare, real death). Reproduction is weighted by capital.
+        self.capital: float = GameConfig.CAPITAL_BASELINE
+        # Age in rounds. Mortality rises with age — long-lived but not immortal.
+        self.age: int = 0
 
     # ------------------------------------------------------------------
     # Identity (each strategy must declare its public-facing identity)
@@ -98,11 +102,11 @@ class BaseStrategy(abc.ABC):
         opponent_unique_id: str,
         my_action: Action | None,
         opponent_action: Action | None,
-        survival_score: float,
     ):
         """
-        Append this round to both histories and accumulate score.
-        Called by the engine for both participants of each interaction.
+        Append this round to both the public log (my_history) and the private,
+        per-opponent record (opponent_history). Capital is applied separately
+        by the engine via apply_capital().
         """
         record = {
             "my_action": my_action,
@@ -110,7 +114,28 @@ class BaseStrategy(abc.ABC):
         }
         self.my_history.append(record)
         self.opponent_history.setdefault(opponent_unique_id, []).append(record)
-        self.total_score += survival_score
+
+    # ------------------------------------------------------------------
+    # Capital — graded fortune that replaces binary survival
+    # ------------------------------------------------------------------
+
+    def apply_capital(self, delta: float):
+        """Apply an interaction's gain/loss to this agent's capital."""
+        self.capital += delta
+
+    def recover(self):
+        """
+        Drift capital back toward baseline by a fixed fraction of the gap —
+        a big loss heals slowly, so its shadow lingers (the 'shadow of the
+        future' that lets reciprocity pay off). Called once per round.
+        """
+        self.capital += GameConfig.CAPITAL_RECOVERY * (
+            GameConfig.CAPITAL_BASELINE - self.capital
+        )
+
+    def is_bankrupt(self) -> bool:
+        """Capital exhausted — a rare, real death (ruin)."""
+        return self.capital <= 0.0
 
     def update_reputation(
         self,
@@ -145,10 +170,10 @@ class BaseStrategy(abc.ABC):
 
     def spawn_offspring(self) -> "BaseStrategy":
         """
-        Produce one fresh offspring of the same strategy type for the next
-        generation. The child is brand new (own unique_id, empty history,
-        zero score) EXCEPT it inherits this (surviving) parent's public
-        Standing — the single bit of memory that crosses a generation.
+        Produce one fresh offspring of the same strategy type. The child is
+        brand new (own unique_id, empty history, baseline capital, age 0)
+        EXCEPT it inherits this parent's public Standing — the single bit of
+        memory that crosses a generation.
         """
         child = type(self)()
         child.reputation = self.reputation
