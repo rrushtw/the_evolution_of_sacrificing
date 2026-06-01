@@ -1,4 +1,5 @@
 import random
+from math import ceil
 
 from definitions import Action, GameConfig, Reputation
 from base_strategy import BaseStrategy
@@ -32,7 +33,9 @@ def _listener_outcome(spotter_action: Action | None, noise: float) -> float:
     return GameConfig.SURVIVAL_LISTENER_IGNORANT
 
 
-def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
+def _resolve_interaction(
+    s1: BaseStrategy, s2: BaseStrategy, noise: float
+) -> tuple[bool, bool]:
     """
     One Alarm Call round between two agents.
 
@@ -41,6 +44,12 @@ def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
     before it manifests in the world. Survival depends on each agent's own
     role + (for listeners) the spotter's actual action + external noise.
     Reputation only updates for agents who actually had a choice to make.
+
+    The survival probability is a literal life-or-death roll: each agent
+    rolls once and dies if it fails. Returns (s1_died, s2_died) so the
+    caller can remove the dead from the living pool immediately — a single
+    unlucky encounter can end an individual. This is the model's core
+    cost: death, not a soft score penalty.
     """
     p_spot = GameConfig.PROB_SPOT_DANGER
 
@@ -99,31 +108,47 @@ def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
     if s2_spots:
         s2.update_reputation(s2_action, s1_rep_seen_by_s2)
 
+    # Life-or-death roll: survival probability is the chance to live, not a score.
+    s1_died = random.random() >= s1_survival
+    s2_died = random.random() >= s2_survival
+    return s1_died, s2_died
 
-def run_tournament(
-    strategies: list[BaseStrategy],
-    rounds_per_game: int,
-    avg_matches_per_strategy: int,
+
+def run_generation(
+    population: list[BaseStrategy],
     noise: float,
+    survival_floor_frac: float,
+    max_encounters_per_agent: int,
 ) -> list[BaseStrategy]:
     """
-    Interaction-based tournament (adapted from the_evolution_of_cooperation).
+    Run one brutal, well-mixed Alarm Call generation and return the survivors.
 
-    Total interactions = (N * avg_matches / 2) * rounds_per_game,
-    each one a random pair drawn without replacement from the population.
+    Repeatedly draw two living agents at random for a one-shot interaction;
+    each interaction may kill one or both (see _resolve_interaction). The
+    dead leave the living pool at once and can never be drawn again — so an
+    individual's whole generation can end on a single bad encounter.
 
-    Silent on purpose — the caller owns all UI (so we don't fight with the
-    outer-loop progress bar in main.py).
+    The generation stops as soon as the living pool falls to the survival
+    floor (ceil(N * survival_floor_frac)) — capping mortality so the species
+    can persist across many generations instead of collapsing in one. A
+    safety cap of (N * max_encounters_per_agent // 2) interactions ends a
+    placid, low-death generation that never reaches the floor.
+
+    Silent on purpose — the caller owns all UI.
     """
-    for s in strategies:
-        s.reset()
+    living = list(population)
+    n = len(living)
+    floor = max(2, ceil(n * survival_floor_frac))
+    interaction_cap = (n * max_encounters_per_agent) // 2
 
-    n = len(strategies)
-    total_matches = (n * avg_matches_per_strategy) // 2
-    total_interactions = total_matches * rounds_per_game
+    for _ in range(interaction_cap):
+        if len(living) <= floor:
+            break
+        s1, s2 = random.sample(living, 2)
+        s1_died, s2_died = _resolve_interaction(s1, s2, noise)
+        if s2_died:
+            living.remove(s2)
+        if s1_died:
+            living.remove(s1)
 
-    for _ in range(total_interactions):
-        s1, s2 = random.sample(strategies, 2)
-        _resolve_interaction(s1, s2, noise)
-
-    return sorted(strategies, key=lambda s: s.total_score, reverse=True)
+    return living

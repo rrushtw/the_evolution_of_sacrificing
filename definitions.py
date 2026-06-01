@@ -45,14 +45,20 @@ class GameConfig:
     SURVIVAL_LISTENER_IGNORANT = float(
         os.getenv("SURVIVAL_LISTENER_IGNORANT", "0.05"))
 
-    # --- Evolution (well-mixed; Axelrod-style) ---
-    # Defaults sized for ~1s/generation on a laptop with 10 strategies.
-    # Crank up via env vars for more statistical power.
+    # --- Evolution (well-mixed; death-based selection) ---
+    # A generation is a brutal one-shot tournament: agents play until the
+    # living pool is culled down to the survival floor (a single bad
+    # encounter can kill), then the survivors breed back up to N and each
+    # newborn inherits only its parent's Standing.
     INITIAL_COPIES = int(os.getenv("INITIAL_COPIES", "10"))
-    KILL_COUNT = int(os.getenv("KILL_COUNT", "5"))
-    ROUNDS_PER_GAME = int(os.getenv("ROUNDS_PER_GAME", "20"))
-    AVG_MATCHES_PER_STRATEGY = int(
-        os.getenv("AVG_MATCHES_PER_STRATEGY", "20"))
+    # Survival floor: stop the generation once this fraction of N is still
+    # alive. It caps per-generation mortality (default 0.5 = at most half die)
+    # so the population persists across generations instead of collapsing.
+    # Lower = crueler environment.
+    SURVIVAL_FLOOR_FRAC = float(os.getenv("SURVIVAL_FLOOR_FRAC", "0.5"))
+    # Safety cap on interactions per generation (as a multiple of N), so a
+    # placid, low-death generation that never reaches the floor still ends.
+    MAX_ENCOUNTERS_PER_AGENT = int(os.getenv("MAX_ENCOUNTERS_PER_AGENT", "4"))
     MAX_GENERATIONS = int(os.getenv("MAX_GENERATIONS", "3000"))
 
     # --- Stability ---

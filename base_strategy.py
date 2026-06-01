@@ -24,8 +24,11 @@ class BaseStrategy(abc.ABC):
         self.reset()
 
     def reset(self):
-        """Called at the start of every generation."""
-        # Standing rule 4: new agents start GOOD (presumption of innocence).
+        """Called once when an agent is born (constructor)."""
+        # Standing rule 4: a fresh agent starts GOOD (presumption of innocence).
+        # This applies to the gen-0 founders. Later generations are bred via
+        # spawn_offspring(), which OVERRIDES this to inherit the parent's
+        # Standing — a lineage that earned BAD passes that stigma on.
         self.reputation: Reputation = Reputation.GOOD
         # Each entry: {"my_action": Action|None, "opponent_action": Action|None}
         # None = that party didn't spot danger this round.
@@ -139,6 +142,17 @@ class BaseStrategy(abc.ABC):
     def private_history_with(self, opponent_unique_id: str) -> list[dict]:
         """Sugar: my private record of interactions with this specific opponent."""
         return self.opponent_history.get(opponent_unique_id, [])
+
+    def spawn_offspring(self) -> "BaseStrategy":
+        """
+        Produce one fresh offspring of the same strategy type for the next
+        generation. The child is brand new (own unique_id, empty history,
+        zero score) EXCEPT it inherits this (surviving) parent's public
+        Standing — the single bit of memory that crosses a generation.
+        """
+        child = type(self)()
+        child.reputation = self.reputation
+        return child
 
     def __str__(self):
         return self.name

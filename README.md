@@ -30,10 +30,16 @@ Two layers of noise can flip the picture:
 - **External noise** (`1%`): a `NOTIFY` may be lost in transit, or a `RUN`
   may accidentally tip off the listener.
 
-Survival probabilities accumulate into a score across hundreds of
-interactions per generation. The bottom-scoring agents die; the top
-scorers clone. Repeat until either one strategy wins, a single species
-remains, or the population settles into a stable mix.
+Survival is a **literal life-or-death roll**, not a score: each interaction,
+an agent lives or dies by its survival probability — one unlucky encounter
+(an ignored listener survives just `5%`) can end it on the spot. A generation
+runs these brutal one-shot encounters until the living pool is culled down to
+a **survival floor** (`SURVIVAL_FLOOR_FRAC`, default `50%`). The survivors —
+and only the survivors — breed back up to the starting size; each newborn
+inherits **one bit** of its parent: its public Standing (a lineage that earned
+a bad name passes that stigma on). Repeat until one strategy wins, a single
+species remains, or the population settles into a stable mix. Crank
+`SURVIVAL_FLOOR_FRAC` down for a crueler world.
 
 ---
 
@@ -184,7 +190,7 @@ Every tunable lives in `.env` (copy from `.env.example`). Key groups:
 | :--- | :--- |
 | Noise | `NOISE_RATE`, `INTERNAL_NOISE_RATE` |
 | Alarm Call mechanics | `PROB_SPOT_DANGER`, `SURVIVAL_SPOTTER_NOTIFY`, `SURVIVAL_SPOTTER_RUN`, `SURVIVAL_LISTENER_WARNED`, `SURVIVAL_LISTENER_IGNORANT` |
-| Evolution | `INITIAL_COPIES`, `KILL_COUNT`, `ROUNDS_PER_GAME`, `AVG_MATCHES_PER_STRATEGY`, `MAX_GENERATIONS` |
+| Evolution | `INITIAL_COPIES`, `SURVIVAL_FLOOR_FRAC`, `MAX_ENCOUNTERS_PER_AGENT`, `MAX_GENERATIONS` |
 | Stability | `STABILITY_THRESHOLD`, `STABILITY_TOLERANCE` |
 | Runtime | `VERBOSE` |
 

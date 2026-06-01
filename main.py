@@ -64,9 +64,11 @@ def _print_header(strategy_types):
     print("🚀 Evolution started")
     print(f"  Strategies     : {len(strategy_types)}  (× {GameConfig.INITIAL_COPIES} copies each = "
           f"{len(strategy_types) * GameConfig.INITIAL_COPIES} agents)")
-    print(f"  Kill / Clone   : {GameConfig.KILL_COUNT} per generation")
-    print(f"  Tournament     : {GameConfig.AVG_MATCHES_PER_STRATEGY} matches/agent × "
-          f"{GameConfig.ROUNDS_PER_GAME} rounds")
+    print(f"  Survival floor : {GameConfig.SURVIVAL_FLOOR_FRAC * 100:.0f}% "
+          f"alive (cull at most {(1 - GameConfig.SURVIVAL_FLOOR_FRAC) * 100:.0f}%/gen, "
+          f"then survivors breed back to N)")
+    print(f"  Encounters cap : ≤ {GameConfig.MAX_ENCOUNTERS_PER_AGENT} per agent/gen "
+          f"(one-shot, life-or-death rolls)")
     print(f"  Noise (external/internal): {GameConfig.NOISE_RATE * 100:.1f}% / "
           f"{GameConfig.INTERNAL_NOISE_RATE * 100:.1f}%")
     print(f"  Stop on stability: window={GameConfig.STABILITY_THRESHOLD} gens, "
@@ -191,9 +193,8 @@ def _save_json(result: dict, type_to_name: dict, duration: float):
             "internal_noise_rate": GameConfig.INTERNAL_NOISE_RATE,
             "prob_spot_danger": GameConfig.PROB_SPOT_DANGER,
             "initial_copies": GameConfig.INITIAL_COPIES,
-            "kill_count": GameConfig.KILL_COUNT,
-            "rounds_per_game": GameConfig.ROUNDS_PER_GAME,
-            "avg_matches_per_strategy": GameConfig.AVG_MATCHES_PER_STRATEGY,
+            "survival_floor_frac": GameConfig.SURVIVAL_FLOOR_FRAC,
+            "max_encounters_per_agent": GameConfig.MAX_ENCOUNTERS_PER_AGENT,
             "stability_threshold": GameConfig.STABILITY_THRESHOLD,
             "stability_tolerance": GameConfig.STABILITY_TOLERANCE,
         },

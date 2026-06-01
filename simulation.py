@@ -2,6 +2,7 @@ import collections
 import importlib
 import inspect
 import pkgutil
+import random
 import time
 from collections import deque
 from typing import Iterable, Type
@@ -47,6 +48,20 @@ def _build_population(
     return population
 
 
+def _breed(
+    survivors: list[BaseStrategy], target_size: int
+) -> list[BaseStrategy]:
+    """
+    Refill the population to `target_size` by cloning survivors.
+
+    Parents are drawn with replacement, so a type's share of the next
+    generation is proportional to how many of it survived — survival is the
+    selection signal. Each newborn inherits its parent's Standing.
+    """
+    parents = random.choices(survivors, k=target_size)
+    return [parent.spawn_offspring() for parent in parents]
+
+
 def _count_by_type(population: Iterable[BaseStrategy]) -> collections.Counter:
     return collections.Counter(type(s).__name__ for s in population)
 
@@ -77,9 +92,8 @@ def _max_swing(window: deque) -> int:
 def run_evolution(
     strategy_types: list[Type[BaseStrategy]],
     initial_copies: int = GameConfig.INITIAL_COPIES,
-    kill_count: int = GameConfig.KILL_COUNT,
-    rounds_per_game: int = GameConfig.ROUNDS_PER_GAME,
-    avg_matches_per_strategy: int = GameConfig.AVG_MATCHES_PER_STRATEGY,
+    survival_floor_frac: float = GameConfig.SURVIVAL_FLOOR_FRAC,
+    max_encounters_per_agent: int = GameConfig.MAX_ENCOUNTERS_PER_AGENT,
     noise: float = GameConfig.NOISE_RATE,
     stability_threshold: int = GameConfig.STABILITY_THRESHOLD,
     stability_tolerance: int = GameConfig.STABILITY_TOLERANCE,
@@ -90,10 +104,11 @@ def run_evolution(
     Run a full evolutionary simulation.
 
     Each generation:
-      1. Run a tournament (engine.run_tournament).
-      2. Kill the bottom `kill_count` agents by score.
-      3. Clone the top `kill_count` strategy types to fill the gap.
-      4. Track extinctions and stability.
+      1. Run a brutal one-shot tournament (engine.run_generation): agents
+         die from the survival roll until the living pool hits the floor.
+      2. The survivors breed back up to N (carrying capacity); each newborn
+         inherits only its parent's Standing. The dead leave no descendants.
+      3. Track extinctions and stability.
 
     Termination:
       - Stable: a window of the last `stability_threshold` generations, in
@@ -101,7 +116,8 @@ def run_evolution(
         (This is stricter than species-set-stable: it requires both the set
         AND the counts to settle, so we don't stop while populations are
         still swinging.)
-      - Only one strategy type remains, OR
+      - Only one strategy type remains (winner), OR
+      - Everyone died in a generation (extinct), OR
       - `max_generations` reached.
 
     `on_generation(generation, snapshot)` is called every generation with a
@@ -109,6 +125,7 @@ def run_evolution(
     itself is silent — the caller owns all UI.
     """
     population = _build_population(strategy_types, initial_copies)
+    target_size = len(population)
 
     counts = _count_by_type(population)
     surviving = set(counts.keys())
@@ -136,18 +153,39 @@ def run_evolution(
         generation += 1
         gen_started = time.time()
 
-        sorted_pop = engine.run_tournament(
+        survivors = engine.run_generation(
             population,
-            rounds_per_game=rounds_per_game,
-            avg_matches_per_strategy=avg_matches_per_strategy,
             noise=noise,
+            survival_floor_frac=survival_floor_frac,
+            max_encounters_per_agent=max_encounters_per_agent,
         )
 
-        # Selection + reproduction: drop bottom-k, clone top-k templates.
-        survivors = sorted_pop[:-kill_count] if kill_count > 0 else sorted_pop
-        top_templates = sorted_pop[:kill_count]
-        newborns = [type(t)() for t in top_templates]
-        population = survivors + newborns
+        if not survivors:
+            # Total wipe-out — nobody left to breed the next generation.
+            stopped_reason = "extinct"
+            counts = collections.Counter()
+            surviving = set()
+            just_extinct = last_surviving
+            for name in just_extinct:
+                extinction_order.append((generation, name))
+            snapshot = {
+                "generation": generation,
+                "counts": {},
+                "reputation": {},
+                "extinct_this_gen": list(just_extinct),
+                "max_swing": 0,
+                "window_fill": len(stability_window),
+                "duration_seconds": round(time.time() - gen_started, 3),
+            }
+            history.append(snapshot)
+            if on_generation:
+                on_generation(generation, snapshot)
+            break
+
+        # Selection + reproduction: only survivors breed, cloning back up to
+        # carrying capacity. Composition follows who survived; each newborn
+        # inherits its parent's Standing (the lone bit that crosses a gen).
+        population = _breed(survivors, target_size)
 
         counts = _count_by_type(population)
         surviving = set(counts.keys())
