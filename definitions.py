@@ -66,12 +66,27 @@ class GameConfig:
     # instant death on bankruptcy (capital ≤ 0). Tuned for long-but-finite lives.
     BASE_DEATH = float(os.getenv("BASE_DEATH", "0.002"))
     AGE_DEATH = float(os.getenv("AGE_DEATH", "0.0010"))
-    # Reputation-biased assortment: with this probability each encounter is
-    # drawn from partners of the SAME Standing as the first agent (homophily /
-    # clustering), else fully random. 0.0 = well-mixed; 1.0 = GOOD only meets
-    # GOOD. The well-mixed stand-in for spatial/network reciprocity.
+    # ASSORTMENT: when an agent forms a NEW tie, P(it prefers a same-Standing
+    # partner). 0 = unbiased rewiring; 1 = GOOD only befriends GOOD.
     ASSORTMENT = float(os.getenv("ASSORTMENT", "0.0"))
     MAX_GENERATIONS = int(os.getenv("MAX_GENERATIONS", "3000"))
+
+    # --- Social network (Stage B) ---
+    # Agents sit on a graph and interact with their contacts → repeated
+    # encounters → private history. AVG_DEGREE = how many contacts each holds.
+    AVG_DEGREE = int(os.getenv("AVG_DEGREE", "6"))
+    # CHURN_RATE = per-round probability each tie reshuffles. The village↔metropolis
+    # dial: 0 = a fixed village (you keep contacts for life → private history rules);
+    # →1 = a churning metropolis (you rarely re-meet → reputation rules). Independent
+    # of this, EXPLOITATION (running on a GOOD partner) always breaks that tie and
+    # the exploiter flees to a new circle — so a hit-and-run escapes private revenge.
+    CHURN_RATE = float(os.getenv("CHURN_RATE", "0.05"))
+
+    # --- Knockout flags (for private-vs-public causal experiments) ---
+    # BLIND_REPUTATION: deciders always see opponents as GOOD (reputation ablated).
+    BLIND_REPUTATION = os.getenv("BLIND_REPUTATION", "0") == "1"
+    # BLIND_PRIVATE: per-opponent memory is never recorded (private history ablated).
+    BLIND_PRIVATE = os.getenv("BLIND_PRIVATE", "0") == "1"
 
     # --- Stability ---
     # Stable = every species' count has fluctuated by ≤ TOLERANCE for the

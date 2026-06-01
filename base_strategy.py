@@ -113,7 +113,9 @@ class BaseStrategy(abc.ABC):
             "opponent_action": opponent_action,
         }
         self.my_history.append(record)
-        self.opponent_history.setdefault(opponent_unique_id, []).append(record)
+        # BLIND_PRIVATE ablates per-opponent memory (private-history knockout).
+        if not GameConfig.BLIND_PRIVATE:
+            self.opponent_history.setdefault(opponent_unique_id, []).append(record)
 
     # ------------------------------------------------------------------
     # Capital — graded fortune that replaces binary survival

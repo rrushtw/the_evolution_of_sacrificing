@@ -8,6 +8,7 @@ from collections import deque
 from typing import Iterable, Type
 
 import engine
+import network
 from base_strategy import BaseStrategy
 from definitions import GameConfig
 
@@ -123,6 +124,7 @@ def run_evolution(
     initial_copies: int = GameConfig.INITIAL_COPIES,
     encounters_per_agent: int = GameConfig.ENCOUNTERS_PER_AGENT,
     assortment: float = GameConfig.ASSORTMENT,
+    churn_rate: float = GameConfig.CHURN_RATE,
     noise: float = GameConfig.NOISE_RATE,
     stability_threshold: int = GameConfig.STABILITY_THRESHOLD,
     stability_tolerance: int = GameConfig.STABILITY_TOLERANCE,
@@ -155,6 +157,7 @@ def run_evolution(
     itself is silent — the caller owns all UI.
     """
     population = _build_population(strategy_types, initial_copies)
+    net = network.Network(population, GameConfig.AVG_DEGREE, assortment)
 
     counts = _count_by_type(population)
     surviving = set(counts.keys())
@@ -183,12 +186,14 @@ def run_evolution(
         generation += 1
         gen_started = time.time()
 
-        # 1. Encounters mutate everyone's capital (no deaths here).
-        engine.run_round(
+        # 1. Encounters over the social network mutate capital; exploited ties
+        #    snap (exploiter flees) and the graph churns. No deaths here.
+        stats = engine.run_round(
             population,
+            net,
             noise=noise,
             encounters_per_agent=encounters_per_agent,
-            assortment=assortment,
+            churn_rate=churn_rate,
         )
 
         # 2. Recover toward baseline + age one round.
@@ -197,12 +202,12 @@ def run_evolution(
             agent.age += 1
 
         # 3. Mortality: old age (rising with age) or bankruptcy.
-        survivors, deaths = [], 0
+        survivors, dead = [], []
         for agent in population:
             death_prob = min(1.0, GameConfig.BASE_DEATH
                              + GameConfig.AGE_DEATH * agent.age)
             if agent.is_bankrupt() or random.random() < death_prob:
-                deaths += 1
+                dead.append(agent)
             else:
                 survivors.append(agent)
 
@@ -230,8 +235,13 @@ def run_evolution(
             break
 
         # 4. Replace each death with an offspring of a capital-weighted parent;
-        #    population stays at N (overlapping generations).
-        population = survivors + _repopulate(survivors, deaths)
+        #    keep the network in sync (dead drop out, newborns enter as strangers).
+        for d in dead:
+            net.on_death(d)
+        newborns = _repopulate(survivors, len(dead))
+        for nb in newborns:
+            net.on_birth(nb, GameConfig.AVG_DEGREE)
+        population = survivors + newborns
 
         counts = _count_by_type(population)
         surviving = set(counts.keys())
@@ -252,6 +262,9 @@ def run_evolution(
             "max_swing": max_swing,
             "window_fill": len(stability_window),
             "duration_seconds": round(time.time() - gen_started, 3),
+            "re_encounter_rate": round(
+                stats["repeats"] / (stats["encounters"] or 1), 4),
+            "exploitations": stats["exploitations"],
             **_capital_stats(population),
         }
         history.append(snapshot)

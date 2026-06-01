@@ -44,25 +44,39 @@ def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
     −0.95 hit ('lost your shirt'), NOTIFY a small −0.1 cost, and being warned
     or running safely costs nothing. Capital recovers slowly elsewhere; ruin
     is rare. Reputation only updates for agents who actually had a choice.
+
+    Returns True if an EXPLOITATION occurred — a spotter RAN on a GOOD partner
+    — so the caller can snap that tie (the exploiter flees).
     """
     p_spot = GameConfig.PROB_SPOT_DANGER
 
     s1_spots = random.random() < p_spot
     s2_spots = random.random() < p_spot
 
-    # Snapshot reputations at the moment of decision — Standing judges
-    # based on what the opponent was perceived as right then.
-    s1_rep_seen_by_s2 = s1.reputation
-    s2_rep_seen_by_s1 = s2.reputation
+    # True Standing drives the network mechanic + the reputation update; what
+    # each decider SEES is forced to GOOD when reputation is knocked out.
+    s1_rep_true = s1.reputation
+    s2_rep_true = s2.reputation
+    if GameConfig.BLIND_REPUTATION:
+        s1_rep_seen_by_s2 = s2_rep_seen_by_s1 = Reputation.GOOD
+    else:
+        s1_rep_seen_by_s2 = s1_rep_true
+        s2_rep_seen_by_s1 = s2_rep_true
 
     s1_action: Action | None = None
     s2_action: Action | None = None
+
+    # Public channel = Standing bit + the opponent's public action log. The
+    # reputation knockout hides BOTH (a stranger you know nothing public about).
+    blind_pub = GameConfig.BLIND_REPUTATION
+    s2_pub_hist = [] if blind_pub else s2.my_history
+    s1_pub_hist = [] if blind_pub else s1.my_history
 
     if s1_spots:
         intent = s1.decide(
             opponent_unique_id=s2.unique_id,
             opponent_reputation=s2_rep_seen_by_s1,
-            opponent_history=s2.my_history,
+            opponent_history=s2_pub_hist,
         )
         s1_action = s1.apply_internal_noise(intent)
 
@@ -70,7 +84,7 @@ def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
         intent = s2.decide(
             opponent_unique_id=s1.unique_id,
             opponent_reputation=s1_rep_seen_by_s2,
-            opponent_history=s1.my_history,
+            opponent_history=s1_pub_hist,
         )
         s2_action = s2.apply_internal_noise(intent)
 
@@ -102,47 +116,48 @@ def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
     s2.apply_capital(s2_survival - 1.0)
 
     if s1_spots:
-        s1.update_reputation(s1_action, s2_rep_seen_by_s1)
+        s1.update_reputation(s1_action, s2_rep_true)
     if s2_spots:
-        s2.update_reputation(s2_action, s1_rep_seen_by_s2)
+        s2.update_reputation(s2_action, s1_rep_true)
+
+    # Exploitation = a spotter RAN on a partner whose true Standing was GOOD.
+    return (
+        (s1_spots and s1_action == Action.RUN and s2_rep_true == Reputation.GOOD)
+        or (s2_spots and s2_action == Action.RUN and s1_rep_true == Reputation.GOOD)
+    )
 
 
-def _draw_pair(living: list[BaseStrategy], assortment: float):
+def run_round(population, network, noise, encounters_per_agent, churn_rate):
     """
-    Pick two distinct living agents for an encounter.
+    Run one round of Alarm Call encounters over the social network.
 
-    With probability `assortment` the partner is drawn from those sharing the
-    first agent's Standing (homophily / clustering); otherwise the partner is
-    fully random. Falls back to random whenever no same-Standing partner
-    exists (e.g. gen 0, when everyone is still GOOD). assortment=0 reproduces
-    the well-mixed baseline exactly.
-    """
-    s1 = random.choice(living)
-    pool = None
-    if assortment > 0 and random.random() < assortment:
-        pool = [a for a in living if a is not s1 and a.reputation == s1.reputation]
-    if not pool:
-        pool = [a for a in living if a is not s1]
-    return s1, random.choice(pool)
+    Each of (encounters_per_agent × N // 2) interactions is drawn between an
+    agent and one of its current contacts — so the same pair meets repeatedly
+    and private history accrues. An exploited tie (a spotter running on a GOOD
+    contact) snaps and the exploiter flees (network.break_and_flee), then the
+    whole graph churns by churn_rate. Only capital is mutated here; aging,
+    mortality and reproduction are the caller's job.
 
-
-def run_round(
-    population: list[BaseStrategy],
-    noise: float,
-    encounters_per_agent: int,
-    assortment: float = 0.0,
-):
-    """
-    Run one round of well-mixed Alarm Call encounters, mutating capital.
-
-    Draws (encounters_per_agent × N // 2) random pairs (so each agent plays
-    ~encounters_per_agent times) and resolves each — every interaction nudges
-    both agents' capital. Nobody dies here: aging, mortality and reproduction
-    are the caller's job (see simulation.run_evolution), which keeps the
-    population intact for the whole round. Silent on purpose.
+    Returns per-round stats: total encounters, how many were REPEATS (both
+    parties had prior private history = realised re-encounter rate), and how
+    many exploitations occurred.
     """
     n = len(population)
     interactions = (n * encounters_per_agent) // 2
+    encounters = repeats = exploitations = 0
     for _ in range(interactions):
-        s1, s2 = _draw_pair(population, assortment)
-        _resolve_interaction(s1, s2, noise)
+        pair = network.draw_encounter()
+        if pair is None:
+            continue
+        s1, s2 = pair
+        is_repeat = bool(s1.private_history_with(s2.unique_id)) or bool(
+            s2.private_history_with(s1.unique_id))
+        exploited = _resolve_interaction(s1, s2, noise)
+        encounters += 1
+        repeats += is_repeat
+        if exploited:
+            network.break_and_flee(s1, s2)
+            exploitations += 1
+    network.churn(churn_rate)
+    return {"encounters": encounters, "repeats": repeats,
+            "exploitations": exploitations}
