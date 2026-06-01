@@ -30,16 +30,22 @@ Two layers of noise can flip the picture:
 - **External noise** (`1%`): a `NOTIFY` may be lost in transit, or a `RUN`
   may accidentally tip off the listener.
 
-Survival probabilities accumulate into a score across hundreds of
-interactions per generation. The bottom-scoring agents die; the top
-scorers clone. Repeat until either one strategy wins, a single species
-remains, or the population settles into a stable mix.
+Survival is a **literal life-or-death roll**, not a score: each interaction,
+an agent lives or dies by its survival probability — one unlucky encounter
+(an ignored listener survives just `5%`) can end it on the spot. A generation
+runs these brutal one-shot encounters until the living pool is culled down to
+a **survival floor** (`SURVIVAL_FLOOR_FRAC`, default `50%`). The survivors —
+and only the survivors — breed back up to the starting size; each newborn
+inherits **one bit** of its parent: its public Standing (a lineage that earned
+a bad name passes that stigma on). Repeat until one strategy wins, a single
+species remains, or the population settles into a stable mix. Crank
+`SURVIVAL_FLOOR_FRAC` down for a crueler world.
 
 ---
 
-## 🧠 The 14 Strategies
+## 🧠 The 16 Strategies
 
-Three controls + eleven hypothesis-testers. **None** of them can see what
+Three controls + thirteen hypothesis-testers. **None** of them can see what
 *type* another agent is — they only observe behavior and reputation.
 
 ### Controls (the corners of the space)
@@ -80,6 +86,8 @@ Three controls + eleven hypothesis-testers. **None** of them can see what
 | :--- | :--- |
 | 🎩 **Politician** | Sucker hunter — `RUN` against opponents whose public log is dominated by `NOTIFY` (test: can unconditional cooperators be parasitized even under Standing?). |
 | 🦊 **Prober** | Probe-and-adapt predator — `RUN` for the first 3 spotter rounds against each opponent; if they retaliate, switch to private TFT, otherwise keep exploiting. |
+| 🏘️ **Clannish** | Trust the familiar — `NOTIFY` anyone it shares private history with, `RUN` on strangers. A model neighbour in a village, a serial exploiter in a churning metropolis: a direct probe of the private/public divide. |
+| 🧼 **Whitewasher** | Reputation launderer — `RUN` while its own Standing is GOOD (spend the good name), `NOTIFY` once BAD (scrub back). Attacks the reputation channel itself; most dangerous where reputation is load-bearing. |
 
 > Three earlier candidates were removed/skipped on purpose:
 > - **Xenophobe**: relied on `isinstance(opponent, Xenophobe)` to recognize
@@ -184,7 +192,7 @@ Every tunable lives in `.env` (copy from `.env.example`). Key groups:
 | :--- | :--- |
 | Noise | `NOISE_RATE`, `INTERNAL_NOISE_RATE` |
 | Alarm Call mechanics | `PROB_SPOT_DANGER`, `SURVIVAL_SPOTTER_NOTIFY`, `SURVIVAL_SPOTTER_RUN`, `SURVIVAL_LISTENER_WARNED`, `SURVIVAL_LISTENER_IGNORANT` |
-| Evolution | `INITIAL_COPIES`, `KILL_COUNT`, `ROUNDS_PER_GAME`, `AVG_MATCHES_PER_STRATEGY`, `MAX_GENERATIONS` |
+| Evolution | `INITIAL_COPIES`, `SURVIVAL_FLOOR_FRAC`, `MAX_ENCOUNTERS_PER_AGENT`, `ASSORTMENT`, `MAX_GENERATIONS` |
 | Stability | `STABILITY_THRESHOLD`, `STABILITY_TOLERANCE` |
 | Runtime | `VERBOSE` |
 
@@ -192,6 +200,50 @@ Every tunable lives in `.env` (copy from `.env.example`). Key groups:
 form a sliding window; every species' count must fluctuate by ≤ `STABILITY_TOLERANCE`
 across that window. Stricter than "no species went extinct recently" — it
 requires the population *counts* to settle, not just the *set*.
+
+**Assortment** (does niceness need company?): `ASSORTMENT` is the probability
+that an encounter is drawn between agents of the *same* Standing — a well-mixed
+stand-in for spatial/network reciprocity (good neighbours clustering together).
+At `0.0` (pure well-mixed, the baseline) altruism collapses and predators win;
+raising it lets cooperators meet and warn each other. In a 12-run sweep the
+share of the population held by reputation-based "nice" strategies climbed
+`33% → 67% → 83%` as `ASSORTMENT` went `0.0 → 0.3 → 0.6`, peaking around `0.6`
+(full clustering at `1.0` dips slightly — defector pockets self-segregate and
+survive too). A small dial that quantifies *how much community it takes for
+sacrifice to pay*.
+
+---
+
+## 🔬 Reproducible experiments
+
+`experiments/phase_sweep.py` runs the full **CHURN × KNOCKOUT × REPS** grid in a
+single container call, seeds each replicate reproducibly, and writes aggregated
+**mean ± 95% CI** to the console and to `output/phase_sweep_<timestamp>.json`:
+
+```bash
+docker compose run --rm simulator python -u experiments/phase_sweep.py
+```
+
+All knobs are env vars (override with `-e`):
+
+| Var | Default | Meaning |
+| :--- | :--- | :--- |
+| `REPS` | `30` | replicates per cell (≥30 for tight CIs) |
+| `BATCH_GENERATIONS` | `300` | rounds per run |
+| `CHURN_GRID` | `0.0,0.1,0.3,0.6,1.0` | village → commuter → metropolis |
+| `RANDOM_SEED` | `12345` | base seed; replicate *i* uses `RANDOM_SEED + i`. Set it on `main.py` too for a reproducible single run. |
+| `JOBS` | all cores | parallel worker processes — replicates run concurrently, so a 30-rep grid is minutes not hours |
+
+Quick smoke test (small + fast):
+
+```bash
+docker compose run --rm -e REPS=8 -e BATCH_GENERATIONS=120 \
+    -e CHURN_GRID=0.0,0.3,1.0 simulator python -u experiments/phase_sweep.py
+```
+
+The headline result: knocking out **public reputation** collapses cooperation in
+a churning metropolis but not in a stable village — quantifying the handoff from
+direct (private-history) to indirect (reputation) reciprocity as society churns.
 
 ---
 
@@ -201,9 +253,10 @@ This repo is staged. Phase 1 is what you're reading.
 
 | Phase | Status | Focus |
 | :--- | :--- | :--- |
-| **Phase 1** — Cross-individual | ✅ Engine + strategies done | Well-mixed, no spatial structure, no species — pure individual-level test of "niceness without kinship" |
-| **Phase 2** — Cross-species | 🔜 | Add `species` + `pair_kind` payoff matrix to test interspecies mutualism vs competition |
-| **Phase 3** — Spatial | 🔜 | Bring back toroidal grid + migration + cultural transmission; see whether spatial structure amplifies or breaks Phase 1's conclusions |
+| **Phase 1** — Individual + reputation | ✅ Done | Death-based selection (Baseline 0) → reputation-biased **assortment** (`r`): quantifies how much clustering it takes for niceness to win (`r* ≈ c/((1−s)b)`) |
+| **Phase 2** — Capital × mobile network | ✅ Done | Replace binary death with graded **capital** + overlapping generations; put interactions on a **mobile social network** with exploitation-driven churn. Unlocks direct (`w`, private history) vs indirect (`q`, reputation) reciprocity and the **village↔metropolis phase map** |
+| **Phase 2.5** — Capital-aware strategies | 🔜 | Expose capital to `decide()`; add strategies that prey on the weak / launder reputation |
+| **Phase 3** — Kin / species | 🔜 | The deliberately-excluded branch: reintroduce genetic relatedness and cross-species payoff matrices |
 
 ---
 

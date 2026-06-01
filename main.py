@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import sys
 import time
 from datetime import datetime
@@ -64,9 +65,22 @@ def _print_header(strategy_types):
     print("🚀 Evolution started")
     print(f"  Strategies     : {len(strategy_types)}  (× {GameConfig.INITIAL_COPIES} copies each = "
           f"{len(strategy_types) * GameConfig.INITIAL_COPIES} agents)")
-    print(f"  Kill / Clone   : {GameConfig.KILL_COUNT} per generation")
-    print(f"  Tournament     : {GameConfig.AVG_MATCHES_PER_STRATEGY} matches/agent × "
-          f"{GameConfig.ROUNDS_PER_GAME} rounds")
+    print(f"  Capital        : baseline {GameConfig.CAPITAL_BASELINE}, "
+          f"recover {GameConfig.CAPITAL_RECOVERY:.0%}/round toward it "
+          f"(loss → graded, not death)")
+    print(f"  Mortality      : {GameConfig.BASE_DEATH:.1%} + "
+          f"{GameConfig.AGE_DEATH:.2%}×age per round, or bankruptcy "
+          f"(long-but-finite lives)")
+    print(f"  Encounters     : ~{GameConfig.ENCOUNTERS_PER_AGENT} per agent/round")
+    print(f"  Assortment     : {GameConfig.ASSORTMENT:.2f} "
+          f"(new-tie same-Standing bias)")
+    print(f"  Network        : ~{GameConfig.AVG_DEGREE} contacts/agent, "
+          f"churn {GameConfig.CHURN_RATE:.0%}/round "
+          f"(0=village→private, 1=metropolis→reputation)")
+    if GameConfig.BLIND_REPUTATION or GameConfig.BLIND_PRIVATE:
+        off = (("reputation " if GameConfig.BLIND_REPUTATION else "")
+               + ("private-history " if GameConfig.BLIND_PRIVATE else ""))
+        print(f"  Knockout       : {off}ablated")
     print(f"  Noise (external/internal): {GameConfig.NOISE_RATE * 100:.1f}% / "
           f"{GameConfig.INTERNAL_NOISE_RATE * 100:.1f}%")
     print(f"  Stop on stability: window={GameConfig.STABILITY_THRESHOLD} gens, "
@@ -78,6 +92,8 @@ def _print_header(strategy_types):
 
 
 def main():
+    if GameConfig.RANDOM_SEED is not None:
+        random.seed(GameConfig.RANDOM_SEED)
     strategy_types = load_all_strategies()
     if not strategy_types:
         print("❌ No strategies found in strategies/")
@@ -113,8 +129,11 @@ def main():
 
         swing = snap.get("max_swing", 0)
         fill = snap.get("window_fill", 0)
+        gini = snap.get("capital_gini", 0)
+        reenc = snap.get("re_encounter_rate", 0)
         pbar.set_postfix_str(
-            f"top=[{top_str}] bad={bad_pct:.0f}% "
+            f"top=[{top_str}] bad={bad_pct:.0f}% gini={gini:.2f} "
+            f"reenc={reenc:.0%} "
             f"swing={swing}/{GameConfig.STABILITY_TOLERANCE} "
             f"window={fill}/{GameConfig.STABILITY_THRESHOLD}",
             refresh=False,
@@ -191,9 +210,16 @@ def _save_json(result: dict, type_to_name: dict, duration: float):
             "internal_noise_rate": GameConfig.INTERNAL_NOISE_RATE,
             "prob_spot_danger": GameConfig.PROB_SPOT_DANGER,
             "initial_copies": GameConfig.INITIAL_COPIES,
-            "kill_count": GameConfig.KILL_COUNT,
-            "rounds_per_game": GameConfig.ROUNDS_PER_GAME,
-            "avg_matches_per_strategy": GameConfig.AVG_MATCHES_PER_STRATEGY,
+            "encounters_per_agent": GameConfig.ENCOUNTERS_PER_AGENT,
+            "capital_baseline": GameConfig.CAPITAL_BASELINE,
+            "capital_recovery": GameConfig.CAPITAL_RECOVERY,
+            "base_death": GameConfig.BASE_DEATH,
+            "age_death": GameConfig.AGE_DEATH,
+            "assortment": GameConfig.ASSORTMENT,
+            "avg_degree": GameConfig.AVG_DEGREE,
+            "churn_rate": GameConfig.CHURN_RATE,
+            "blind_reputation": GameConfig.BLIND_REPUTATION,
+            "blind_private": GameConfig.BLIND_PRIVATE,
             "stability_threshold": GameConfig.STABILITY_THRESHOLD,
             "stability_tolerance": GameConfig.STABILITY_TOLERANCE,
         },
