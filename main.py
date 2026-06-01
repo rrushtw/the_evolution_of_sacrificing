@@ -69,6 +69,8 @@ def _print_header(strategy_types):
           f"then survivors breed back to N)")
     print(f"  Encounters cap : ≤ {GameConfig.MAX_ENCOUNTERS_PER_AGENT} per agent/gen "
           f"(one-shot, life-or-death rolls)")
+    print(f"  Assortment     : {GameConfig.ASSORTMENT:.2f} "
+          f"(0=well-mixed, 1=same-Standing clusters)")
     print(f"  Noise (external/internal): {GameConfig.NOISE_RATE * 100:.1f}% / "
           f"{GameConfig.INTERNAL_NOISE_RATE * 100:.1f}%")
     print(f"  Stop on stability: window={GameConfig.STABILITY_THRESHOLD} gens, "
@@ -195,6 +197,7 @@ def _save_json(result: dict, type_to_name: dict, duration: float):
             "initial_copies": GameConfig.INITIAL_COPIES,
             "survival_floor_frac": GameConfig.SURVIVAL_FLOOR_FRAC,
             "max_encounters_per_agent": GameConfig.MAX_ENCOUNTERS_PER_AGENT,
+            "assortment": GameConfig.ASSORTMENT,
             "stability_threshold": GameConfig.STABILITY_THRESHOLD,
             "stability_tolerance": GameConfig.STABILITY_TOLERANCE,
         },

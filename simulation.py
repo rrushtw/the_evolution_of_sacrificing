@@ -94,6 +94,7 @@ def run_evolution(
     initial_copies: int = GameConfig.INITIAL_COPIES,
     survival_floor_frac: float = GameConfig.SURVIVAL_FLOOR_FRAC,
     max_encounters_per_agent: int = GameConfig.MAX_ENCOUNTERS_PER_AGENT,
+    assortment: float = GameConfig.ASSORTMENT,
     noise: float = GameConfig.NOISE_RATE,
     stability_threshold: int = GameConfig.STABILITY_THRESHOLD,
     stability_tolerance: int = GameConfig.STABILITY_TOLERANCE,
@@ -158,6 +159,7 @@ def run_evolution(
             noise=noise,
             survival_floor_frac=survival_floor_frac,
             max_encounters_per_agent=max_encounters_per_agent,
+            assortment=assortment,
         )
 
         if not survivors:

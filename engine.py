@@ -114,11 +114,31 @@ def _resolve_interaction(
     return s1_died, s2_died
 
 
+def _draw_pair(living: list[BaseStrategy], assortment: float):
+    """
+    Pick two distinct living agents for an encounter.
+
+    With probability `assortment` the partner is drawn from those sharing the
+    first agent's Standing (homophily / clustering); otherwise the partner is
+    fully random. Falls back to random whenever no same-Standing partner
+    exists (e.g. gen 0, when everyone is still GOOD). assortment=0 reproduces
+    the well-mixed baseline exactly.
+    """
+    s1 = random.choice(living)
+    pool = None
+    if assortment > 0 and random.random() < assortment:
+        pool = [a for a in living if a is not s1 and a.reputation == s1.reputation]
+    if not pool:
+        pool = [a for a in living if a is not s1]
+    return s1, random.choice(pool)
+
+
 def run_generation(
     population: list[BaseStrategy],
     noise: float,
     survival_floor_frac: float,
     max_encounters_per_agent: int,
+    assortment: float = 0.0,
 ) -> list[BaseStrategy]:
     """
     Run one brutal, well-mixed Alarm Call generation and return the survivors.
@@ -144,7 +164,7 @@ def run_generation(
     for _ in range(interaction_cap):
         if len(living) <= floor:
             break
-        s1, s2 = random.sample(living, 2)
+        s1, s2 = _draw_pair(living, assortment)
         s1_died, s2_died = _resolve_interaction(s1, s2, noise)
         if s2_died:
             living.remove(s2)

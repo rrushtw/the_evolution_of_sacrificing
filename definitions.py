@@ -59,6 +59,12 @@ class GameConfig:
     # Safety cap on interactions per generation (as a multiple of N), so a
     # placid, low-death generation that never reaches the floor still ends.
     MAX_ENCOUNTERS_PER_AGENT = int(os.getenv("MAX_ENCOUNTERS_PER_AGENT", "4"))
+    # Reputation-biased assortment: with this probability each encounter is
+    # drawn from partners of the SAME Standing as the first agent (homophily /
+    # clustering), else fully random. 0.0 = the well-mixed baseline; 1.0 =
+    # GOOD only ever meets GOOD. Lets cooperators cluster and warn each other —
+    # the well-mixed stand-in for spatial/network reciprocity.
+    ASSORTMENT = float(os.getenv("ASSORTMENT", "0.0"))
     MAX_GENERATIONS = int(os.getenv("MAX_GENERATIONS", "3000"))
 
     # --- Stability ---

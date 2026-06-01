@@ -190,7 +190,7 @@ Every tunable lives in `.env` (copy from `.env.example`). Key groups:
 | :--- | :--- |
 | Noise | `NOISE_RATE`, `INTERNAL_NOISE_RATE` |
 | Alarm Call mechanics | `PROB_SPOT_DANGER`, `SURVIVAL_SPOTTER_NOTIFY`, `SURVIVAL_SPOTTER_RUN`, `SURVIVAL_LISTENER_WARNED`, `SURVIVAL_LISTENER_IGNORANT` |
-| Evolution | `INITIAL_COPIES`, `SURVIVAL_FLOOR_FRAC`, `MAX_ENCOUNTERS_PER_AGENT`, `MAX_GENERATIONS` |
+| Evolution | `INITIAL_COPIES`, `SURVIVAL_FLOOR_FRAC`, `MAX_ENCOUNTERS_PER_AGENT`, `ASSORTMENT`, `MAX_GENERATIONS` |
 | Stability | `STABILITY_THRESHOLD`, `STABILITY_TOLERANCE` |
 | Runtime | `VERBOSE` |
 
@@ -198,6 +198,17 @@ Every tunable lives in `.env` (copy from `.env.example`). Key groups:
 form a sliding window; every species' count must fluctuate by ≤ `STABILITY_TOLERANCE`
 across that window. Stricter than "no species went extinct recently" — it
 requires the population *counts* to settle, not just the *set*.
+
+**Assortment** (does niceness need company?): `ASSORTMENT` is the probability
+that an encounter is drawn between agents of the *same* Standing — a well-mixed
+stand-in for spatial/network reciprocity (good neighbours clustering together).
+At `0.0` (pure well-mixed, the baseline) altruism collapses and predators win;
+raising it lets cooperators meet and warn each other. In a 12-run sweep the
+share of the population held by reputation-based "nice" strategies climbed
+`33% → 67% → 83%` as `ASSORTMENT` went `0.0 → 0.3 → 0.6`, peaking around `0.6`
+(full clustering at `1.0` dips slightly — defector pockets self-segregate and
+survive too). A small dial that quantifies *how much community it takes for
+sacrifice to pay*.
 
 ---
 
