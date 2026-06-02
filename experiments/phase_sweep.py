@@ -13,7 +13,7 @@ All knobs are env vars (override on the command line with -e):
 
     REPS=30                 replicates per cell (≥30 for tight CIs)
     BATCH_GENERATIONS=300   rounds per run
-    CHURN_GRID=0.0,0.1,0.3,0.6,1.0   village → 北漂 → metropolis
+    CHURN_GRID=0.0,0.1,0.3,0.6,1.0   village → 城鄉移民 → metropolis
     RANDOM_SEED=12345       base seed; replicate i uses RANDOM_SEED+i
                             (same seeds reused across cells = paired contrasts)
     JOBS=<cpu count>        parallel worker processes (replicates run in parallel)
