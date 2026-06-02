@@ -65,6 +65,9 @@ def _print_header(strategy_types):
     print("🚀 Evolution started")
     print(f"  Strategies     : {len(strategy_types)}  (× {GameConfig.INITIAL_COPIES} copies each = "
           f"{len(strategy_types) * GameConfig.INITIAL_COPIES} agents)")
+    sp = GameConfig.society_params()
+    print(f"  Society        : {sp['preset']}  | c={sp['c']} b={sp['b']} "
+          f"(s={sp['s']}) → r*={sp['r_star']} (門檻 c/b;越高善良越難存活)")
     print(f"  Capital        : baseline {GameConfig.CAPITAL_BASELINE}, "
           f"recover {GameConfig.CAPITAL_RECOVERY:.0%}/round toward it "
           f"(loss → graded, not death)")
@@ -206,6 +209,8 @@ def _save_json(result: dict, type_to_name: dict, duration: float):
             "stopped_reason": result["stopped_reason"],
         },
         "config": {
+            "society_preset": GameConfig.SOCIETY_PRESET,
+            **{k: GameConfig.society_params()[k] for k in ("c", "b", "r_star")},
             "noise_rate": GameConfig.NOISE_RATE,
             "internal_noise_rate": GameConfig.INTERNAL_NOISE_RATE,
             "prob_spot_danger": GameConfig.PROB_SPOT_DANGER,
