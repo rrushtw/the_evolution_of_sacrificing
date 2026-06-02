@@ -37,13 +37,55 @@ class GameConfig:
 
     # --- Alarm Call mechanics ---
     PROB_SPOT_DANGER = float(os.getenv("PROB_SPOT_DANGER", "0.5"))
+
+    # --- Society presets (A1: c/b 社會旋鈕) ---
+    # 「不同社會」的本質就是門檻 c/b 不同 (c = NOTIFY 的發聲成本, b = 被警告的
+    # 好處)。每個 preset 只覆寫四個 SURVIVAL_* 的「預設值」, s = PROB_SPOT_DANGER
+    # 固定, 讓奇異點 r* = c/((1−s)b) 在同一條 churn 軸上平移。個別 SURVIVAL_* ENV
+    # 仍可再覆寫 preset。各 preset 只列出與 default 不同的鍵。
+    #   default     : c=0.10 b=0.95 → r*≈0.21 (現狀基準)
+    #   cheap_voice : NOTIFY 0.9→0.97 (c↓) → c=0.03 r*≈0.06  低成本發聲
+    #   safety_net  : IGNORANT 0.05→0.55 (b↓) → b=0.45 r*≈0.42  現代安全網
+    #   ancient     : NOTIFY 0.9→0.75 (c↑) → c=0.25 r*≈0.53  殘酷古代
+    SOCIETY_PRESETS = {
+        "default": {},
+        "cheap_voice": {"spotter_notify": 0.97},
+        "safety_net": {"listener_ignorant": 0.55},
+        "ancient": {"spotter_notify": 0.75},
+    }
+    # 四個 SURVIVAL_* 的出廠預設 (= default preset)。
+    _SURVIVAL_DEFAULTS = {
+        "spotter_notify": 0.9,
+        "spotter_run": 1.0,
+        "listener_warned": 1.0,
+        "listener_ignorant": 0.05,
+    }
+    SOCIETY_PRESET = os.getenv("SOCIETY_PRESET", "default")
+    _preset = {**_SURVIVAL_DEFAULTS, **SOCIETY_PRESETS.get(SOCIETY_PRESET, {})}
+
     SURVIVAL_SPOTTER_NOTIFY = float(
-        os.getenv("SURVIVAL_SPOTTER_NOTIFY", "0.9"))
-    SURVIVAL_SPOTTER_RUN = float(os.getenv("SURVIVAL_SPOTTER_RUN", "1.0"))
+        os.getenv("SURVIVAL_SPOTTER_NOTIFY", _preset["spotter_notify"]))
+    SURVIVAL_SPOTTER_RUN = float(
+        os.getenv("SURVIVAL_SPOTTER_RUN", _preset["spotter_run"]))
     SURVIVAL_LISTENER_WARNED = float(
-        os.getenv("SURVIVAL_LISTENER_WARNED", "1.0"))
+        os.getenv("SURVIVAL_LISTENER_WARNED", _preset["listener_warned"]))
     SURVIVAL_LISTENER_IGNORANT = float(
-        os.getenv("SURVIVAL_LISTENER_IGNORANT", "0.05"))
+        os.getenv("SURVIVAL_LISTENER_IGNORANT", _preset["listener_ignorant"]))
+
+    @classmethod
+    def society_params(cls):
+        """門檻框架的衍生量, 由當前四個 SURVIVAL_* 即時算出 (單一真相來源)。
+
+        c = 發聲成本 (RUN − NOTIFY), b = 被警告的好處 (WARNED − IGNORANT),
+        s = P(發現危險), 奇異點 r* = c/((1−s)b) —— 維繫合作所需的最低機制強度。
+        """
+        s = cls.PROB_SPOT_DANGER
+        c = cls.SURVIVAL_SPOTTER_RUN - cls.SURVIVAL_SPOTTER_NOTIFY
+        b = cls.SURVIVAL_LISTENER_WARNED - cls.SURVIVAL_LISTENER_IGNORANT
+        denom = (1.0 - s) * b
+        r_star = c / denom if denom else float("inf")
+        return {"preset": cls.SOCIETY_PRESET, "s": s,
+                "c": round(c, 4), "b": round(b, 4), "r_star": round(r_star, 4)}
 
     # --- Evolution (capital + overlapping generations) ---
     # Death is no longer binary: outcomes become capital gains/losses. Agents
