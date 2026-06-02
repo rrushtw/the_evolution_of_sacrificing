@@ -30,8 +30,7 @@ docker compose run --rm \
 
 ## 相圖 1 — 14 策略 baseline
 
-`nice%`(mean ± 95% CI, n=30)。原始輸出:[`raw/sweep_14strategies.txt`](raw/sweep_14strategies.txt)、
-資料:[`sweep_14strategies.json`](sweep_14strategies.json)。
+`nice%`(mean ± 95% CI, n=30、`RANDOM_SEED=12345`)。原始 console / JSON 不入版控(見[怎麼重現](#怎麼重現),固定 seed 可重跑得同數)。
 
 | churn | 再相遇率 | none | −reputation | −private |
 | :--: | :--: | :--: | :--: | :--: |
@@ -57,8 +56,7 @@ docker compose run --rm \
 - **Clannish(排外者)**:NOTIFY 給有私人交情者、RUN 給陌生人 → 村莊好鄰居 / 都會掠食者。
 - **Whitewasher(洗白者)**:自己 GOOD 就 RUN 套現、變 BAD 就 NOTIFY 洗白 → 攻擊名聲管道本身。
 
-`nice%`(mean ± 95% CI, n=30)。原始:[`raw/sweep_16strategies.txt`](raw/sweep_16strategies.txt)、
-資料:[`sweep_16strategies.json`](sweep_16strategies.json)。
+`nice%`(mean ± 95% CI, n=30、`RANDOM_SEED=12345`)。原始 console / JSON 不入版控(見[怎麼重現](#怎麼重現),固定 seed 可重跑得同數)。
 
 | churn | none | −reputation | −private | none 對比 14 策略 |
 | :--: | :--: | :--: | :--: | :--: |
@@ -105,8 +103,7 @@ docker compose run --rm \
 直覺:**發聲越便宜(`cheap_voice`)、或沒被警告也死不了(`safety_net`)→ 門檻挪動**;
 古代世界喊一聲就被掠食者鎖定(NOTIFY 存活率低)→ 合作門檻最高。
 
-`nice%`(none-knockout, mean ± 95% CI, n=30)。原始:[`raw/sweep_society_presets.txt`](raw/sweep_society_presets.txt)、
-資料:[`sweep_society_presets.json`](sweep_society_presets.json)。
+`nice%`(none-knockout, mean ± 95% CI, n=30、`RANDOM_SEED=12345`)。原始 console / JSON 不入版控(見[怎麼重現](#怎麼重現),固定 seed 可重跑得同數)。
 
 | churn | `cheap_voice` r*0.06 | `default` r*0.21 | `safety_net` r*0.44 | `ancient` r*0.53 |
 | :--: | :--: | :--: | :--: | :--: |
