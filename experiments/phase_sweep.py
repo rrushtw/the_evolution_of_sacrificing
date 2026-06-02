@@ -17,6 +17,15 @@ All knobs are env vars (override on the command line with -e):
     RANDOM_SEED=12345       base seed; replicate i uses RANDOM_SEED+i
                             (same seeds reused across cells = paired contrasts)
     JOBS=<cpu count>        parallel worker processes (replicates run in parallel)
+    CHECKPOINT_FILE=output/phase_sweep_checkpoint.json
+                            incremental per-replicate checkpoint. Each finished
+                            replicate is flushed here (atomic write); re-running
+                            the SAME config resumes — already-done replicates are
+                            skipped. Deleted on full completion. A config change
+                            (presets/churn/reps/seed/…) invalidates it → fresh run.
+
+Resume after an interrupt (kill / reboot): just launch the exact same command
+again — it picks up where it stopped. Mount output/ so the checkpoint survives.
 
 Example — a quick smoke test:
     docker compose run --rm -e REPS=8 -e BATCH_GENERATIONS=120 \
@@ -111,9 +120,10 @@ def _one_run(preset, churn, blind_rep, blind_priv, seed):
 
 
 def _worker(task):
-    """One replicate, run in its own process. Returns (preset, churn, label, metrics)."""
+    """One replicate, run in its own process. Returns (key, preset, churn, label, metrics)."""
     preset, churn, label, blind_rep, blind_priv, seed = task
-    return preset, churn, label, _one_run(preset, churn, blind_rep, blind_priv, seed)
+    key = _run_key(preset, churn, label, seed)
+    return key, preset, churn, label, _one_run(preset, churn, blind_rep, blind_priv, seed)
 
 
 def _agg(xs):
@@ -123,32 +133,98 @@ def _agg(xs):
     return {"mean": round(m, 4), "std": round(sd, 4), "ci95": round(ci, 4)}
 
 
+# ---- Checkpoint (resumable across interrupts) -------------------------------
+CKPT_PATH = os.getenv(
+    "CHECKPOINT_FILE", os.path.join(_ROOT, "output", "phase_sweep_checkpoint.json"))
+
+
+def _run_key(preset, churn, label, seed):
+    """Unique id for one replicate — stable across runs of the same config."""
+    return f"{preset}|{churn}|{label}|{seed}"
+
+
+def _signature():
+    """Config fingerprint; a mismatch means an old checkpoint can't be reused."""
+    return {"reps": REPS, "generations": GENS, "base_seed": BASE_SEED,
+            "presets": PRESETS, "churn_grid": CHURNS,
+            "knockouts": [k[0] for k in KNOCKOUTS],
+            "strategies": len(TYPES), "N": N}
+
+
+def _load_checkpoint():
+    """Return {key: {preset,churn,label,metrics}} of finished replicates, or {}."""
+    if not os.path.exists(CKPT_PATH):
+        return {}
+    try:
+        with open(CKPT_PATH) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        print(f"⚠ checkpoint 損毀,忽略重跑 ({CKPT_PATH})")
+        return {}
+    if data.get("signature") != _signature():
+        print(f"⚠ checkpoint 設定不符,忽略重跑 ({CKPT_PATH})")
+        return {}
+    return data.get("runs", {})
+
+
+def _save_checkpoint(runs):
+    """Atomic write (tmp + replace) so a kill mid-flush never corrupts the file."""
+    os.makedirs(os.path.dirname(CKPT_PATH), exist_ok=True)
+    tmp = CKPT_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"signature": _signature(), "runs": runs}, f, ensure_ascii=False)
+    os.replace(tmp, CKPT_PATH)
+
+
 def main():
-    tasks = [(preset, churn, label, br, bp, BASE_SEED + i)
-             for preset in PRESETS
-             for churn in CHURNS
-             for label, br, bp in KNOCKOUTS
-             for i in range(REPS)]
+    all_tasks = [(preset, churn, label, br, bp, BASE_SEED + i)
+                 for preset in PRESETS
+                 for churn in CHURNS
+                 for label, br, bp in KNOCKOUTS
+                 for i in range(REPS)]
     rstars = {p: _preset_rstar(p) for p in PRESETS}
     jobs = int(os.getenv("JOBS", str(multiprocessing.cpu_count() or 1)))
+    total = len(all_tasks)
+
+    # Resume: skip replicates already in the checkpoint, pre-fill their results.
+    done_runs = _load_checkpoint()
+    by_cell = defaultdict(list)
+    for rec in done_runs.values():
+        by_cell[(rec["preset"], rec["churn"], rec["label"])].append(rec["metrics"])
+    tasks = [t for t in all_tasks
+             if _run_key(t[0], t[1], t[2], t[5]) not in done_runs]
+
     print(f"Batch phase-sweep | strategies={len(TYPES)} N={N} | REPS={REPS} "
           f"GENS={GENS} base_seed={BASE_SEED} jobs={jobs}")
     print(f"presets: {', '.join(f'{p} (r*={rstars[p]})' for p in PRESETS)}")
     print(f"churn grid: {CHURNS} | knockouts: {[k[0] for k in KNOCKOUTS]}")
-    print(f"total runs = {len(tasks)}\n")
+    if done_runs:
+        print(f"resume: {len(done_runs)}/{total} 已完成 (checkpoint {CKPT_PATH}),"
+              f" 續跑剩 {len(tasks)}")
+    print(f"total runs = {total}\n")
 
     started = time.time()
     # Replicates are independent and each self-seeds → run them in parallel.
-    by_cell = defaultdict(list)
+    # Flush the checkpoint every ~`jobs` results: bounds I/O while keeping the
+    # most-we-can-lose-on-a-kill to roughly one wave of in-flight workers.
+    flush_every = max(1, jobs)
     with multiprocessing.Pool(jobs) as pool:
-        done = 0
-        step = max(1, len(tasks) // 20)
-        for preset, churn, label, m in pool.imap_unordered(_worker, tasks):
+        done = len(done_runs)
+        since_flush = 0
+        step = max(1, total // 20)
+        for key, preset, churn, label, m in pool.imap_unordered(_worker, tasks):
             by_cell[(preset, churn, label)].append(m)
+            done_runs[key] = {"preset": preset, "churn": churn,
+                              "label": label, "metrics": m}
             done += 1
-            if done % step == 0 or done == len(tasks):
-                print(f"  {done}/{len(tasks)} runs done "
+            since_flush += 1
+            if since_flush >= flush_every:
+                _save_checkpoint(done_runs)
+                since_flush = 0
+            if done % step == 0 or done == total:
+                print(f"  {done}/{total} runs done "
                       f"({time.time() - started:.0f}s)")
+    _save_checkpoint(done_runs)   # final flush of the last partial wave
 
     cells = {}            # (preset, churn, label) -> aggregated metrics + winners
     for key, runs in by_cell.items():
@@ -211,6 +287,13 @@ def main():
         json.dump(payload, f, indent=2, ensure_ascii=False)
     print(f"\nSaved → ./output/phase_sweep_{stamp}.json  "
           f"({payload['config']['duration_seconds']}s)")
+
+    # Whole grid finished → drop the checkpoint so a re-run starts clean.
+    try:
+        os.remove(CKPT_PATH)
+        print(f"✓ checkpoint 已清除 ({CKPT_PATH})")
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":
