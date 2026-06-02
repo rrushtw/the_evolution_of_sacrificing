@@ -12,8 +12,13 @@ per-strategy 明細 (share / capital / age / survived)。本腳本「純讀那�
   • 環境排名       — 每策略當幾次冠軍格 / 進前 3 / 在幾格全滅。驗證 maximin 結論
                      是否被單一退化格綁架。
 
-主指標預設 capital (採用該策略的個體之平均資本 = 「我過得好不好」, 非零和)。
-可切 share (零和、反映香火能否傳下去): ARENA_METRIC=share。
+主指標預設 composite (複合分數 = capital + W·survived): 「活著時過得多好」加上
+「不被團滅的價值」—— 風險趨避者最怕的是某種社會把整個策略團滅, 故給存活率額外權重。
+W 由 ARENA_SURVIVAL_WEIGHT 調 (預設 1.0)。可切純 capital / share / age / survived。
+
+⚠ maximin 取「最差格」: 凡在任一環境格會被『團滅』(該格平均存活率=0→分數=0) 的策略,
+其 maximin 觸底並列 0 —— 這是 maximin 對風險趨避者的誠實結論 (有種社會會滅了你 = 不可採用)。
+為免底部並列看似隨機, maximin 同分時以「跨格平均分數」tie-break 排序。
 
 ⚠ 前提 (務必連同結論一起讀): 沙盒是「16 策略生態混戰」(非兩兩對局、非 invasion),
 每策略表現都受同場其他 15 策略影響。故本擂台量的是「在當前 16 策略共存的社會中」
@@ -32,8 +37,9 @@ import sys
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-METRIC = os.getenv("ARENA_METRIC", "capital")
-_VALID_METRICS = ("capital", "share", "age", "survived")
+METRIC = os.getenv("ARENA_METRIC", "composite")
+SURVIVAL_WEIGHT = float(os.getenv("ARENA_SURVIVAL_WEIGHT", "1.0"))
+_VALID_METRICS = ("composite", "capital", "share", "age", "survived")
 
 
 def load_latest_sweep(path=None):
@@ -56,21 +62,35 @@ def load_latest_sweep(path=None):
 
 
 def build_matrix(payload, metric):
-    """回傳 {strategy: {cell_key: score}}, score 取該 cell 該策略該指標的 mean。"""
+    """回傳 {strategy: {cell_key: score}}, score 取該 cell 該策略該指標的 mean。
+
+    metric="composite" 時 score = capital.mean + SURVIVAL_WEIGHT·survived.mean
+    (活著時過得多好 + 不被團滅的價值); 其餘直接取該欄 mean。
+    """
     matrix = {}
     for cell_key, cell in payload["cells"].items():
         for name, fields in cell["per_strategy"].items():
-            matrix.setdefault(name, {})[cell_key] = fields[metric]["mean"]
+            if metric == "composite":
+                score = fields["capital"]["mean"] + SURVIVAL_WEIGHT * fields["survived"]["mean"]
+            else:
+                score = fields[metric]["mean"]
+            matrix.setdefault(name, {})[cell_key] = score
     return matrix
 
 
 def maximin(matrix):
-    """每策略跨 cell 取 min + 記最差格; 降序 (分數越高越穩健)。"""
+    """每策略跨 cell 取 min + 記最差格; 降序 (分數越高越穩健)。
+
+    maximin 同分 (典型: 多個策略都有某『團滅格』分數=0) 時, 以「跨格平均分數」
+    tie-break —— 否則底部並列看似隨機; 平均高者代表整體較強, 排前面。
+    """
     out = []
     for name, row in matrix.items():
         worst_cell = min(row, key=row.get)
-        out.append((name, row[worst_cell], worst_cell))
-    return sorted(out, key=lambda t: t[1], reverse=True)
+        mean_score = sum(row.values()) / len(row)
+        out.append((name, row[worst_cell], worst_cell, mean_score))
+    out.sort(key=lambda t: (t[1], t[3]), reverse=True)
+    return [(n, mn, c) for n, mn, c, _ in out]
 
 
 def minimax_regret(matrix):
@@ -115,7 +135,9 @@ def print_arena_table(payload, metric):
     n_cells = len(next(iter(matrix.values())))
 
     cfg = payload.get("config", {})
-    print(f"\n=== 策略擂台 | 主指標={metric} | {n_cells} 環境格 "
+    metric_label = (f"composite(capital+{SURVIVAL_WEIGHT:g}·survived)"
+                    if metric == "composite" else metric)
+    print(f"\n=== 策略擂台 | 主指標={metric_label} | {n_cells} 環境格 "
           f"(preset×churn×knockout) | reps={cfg.get('reps', '?')} ===")
     print("⚠ 量的是『在當前 16 策略共存社會中』採用某策略的穩健性, 非脈絡無關內在價值。\n")
     print(f"{'策略':<16} {'maximin↑':>9} {'最差格':<34} {'mean':>6} "
@@ -151,6 +173,7 @@ def main():
     result = {
         "source": os.path.basename(path),
         "metric": METRIC,
+        "survival_weight": SURVIVAL_WEIGHT if METRIC == "composite" else None,
         "n_cells": len(next(iter(matrix.values()))),
         "maximin": [{"strategy": n, "score": v, "worst_cell": c} for n, v, c in mm],
         "minimax_regret": [{"strategy": n, "max_regret": r, "worst_cell": c}
