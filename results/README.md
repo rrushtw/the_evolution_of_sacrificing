@@ -88,6 +88,44 @@ docker compose run --rm \
 
 ---
 
+## 相圖 3 — A1:c/b 社會 preset,量 `r*` 平移
+
+前兩張圖固定 payoff、只掃 churn(改的是 `w`/`q` 折扣)。這張反過來:**固定 churn 軸,改社會的
+`c/b` 比值** —— 因為「不同社會」的本質就是發聲成本 `c` 與被警告收益 `b` 的比值不同,而門檻
+`r* = c/((1−s)b)` 直接隨之平移。零新數學,只動四個 `SURVIVAL_*` payoff 常數,收成幾組具名 preset
+(`SOCIETY_PRESET` 旋鈕,`s = 0.5` 全程固定):
+
+| preset | 旋鈕變動 | c | b | 理論 `r*` |
+| :-- | :-- | :--: | :--: | :--: |
+| `cheap_voice` 低成本發聲 | NOTIFY 存活 0.9→0.97 | 0.03 | 0.95 | **0.06** |
+| `default` 現狀 | —— | 0.10 | 0.95 | **0.21** |
+| `safety_net` 現代安全網 | IGNORANT 存活 0.05→0.55 | 0.10 | 0.45 | **0.44** |
+| `ancient` 殘酷古代 | NOTIFY 存活 0.9→0.75 | 0.25 | 0.95 | **0.53** |
+
+直覺:**發聲越便宜(`cheap_voice`)、或沒被警告也死不了(`safety_net`)→ 門檻挪動**;
+古代世界喊一聲就被掠食者鎖定(NOTIFY 存活率低)→ 合作門檻最高。
+
+`nice%`(none-knockout, mean ± 95% CI, n=30)。原始:[`raw/sweep_society_presets.txt`](raw/sweep_society_presets.txt)、
+資料:[`sweep_society_presets.json`](sweep_society_presets.json)。
+
+| churn | `cheap_voice` r*0.06 | `default` r*0.21 | `safety_net` r*0.44 | `ancient` r*0.53 |
+| :--: | :--: | :--: | :--: | :--: |
+| 0.0 | **66%±11%** | 44%±15% | 34%±9% | **16%±13%** |
+| 0.1 | 50%±15% | 44%±15% | 25%±8% | 18%±13% |
+| 0.3 | 58%±14% | 37%±15% | 24%±9% | 18%±13% |
+| 0.6 | 66%±13% | 26%±13% | 28%±9% | 9%±9% |
+| 1.0 | 58%±13% | 38%±16% | 23%±7% | 7%±8% |
+
+**結論 — `c/b` 越高(合作門檻 `r*` 越大),善良策略越難立足。** 固定任一 churn 橫看,`nice%` 幾乎
+單調隨 `r*` 反向遞減,排序對齊理論的 `cheap_voice < default < safety_net < ancient`。最乾淨的是
+churn=0:**66% → 44% → 34% → 16%**,跨 preset 拉開 50 個百分點。唯一逆轉在 churn 0.6 的
+`default`(26%)vs `safety_net`(28%),落在 CI95 重疊內。
+
+→ **同一條 churn 軸,換個社會 preset(只調 payoff)就能讓相變/名聲依賴整體平移** —— 驗證統一框架
+裡 `r*` 不只是個常數,而是可被社會結構推動的旋鈕。
+
+---
+
 ## 注意
 
 - 無 random seed 時 run-to-run 變異大(模型特性);本實驗以固定 base seed + n=30 取得統計顯著性。
