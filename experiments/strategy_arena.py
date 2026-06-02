@@ -5,8 +5,10 @@ phase_sweep.py 跑出的 JSON 裡, 每個環境格子 (preset × churn × knocko
 per-strategy 明細 (share / capital / age / survived)。本腳本「純讀那份 JSON、零模擬」,
 把它轉成「策略 × 環境」矩陣, 算個人決策者該看的穩健性準則:
 
-  • maximin        — 每策略跨所有環境取「最差表現」, 選最差也最不差者 (風險趨避;
-                     「不知道命運會把我丟進哪種社會時, 學哪招最不會出錯」)。
+  • maximin (CVaR 軟化) — 每策略取「最差 CVAR_K 格的平均」(預設最差 5 格, 非絕對最差
+                     1 格)。風險趨避「不知命運丟我進哪種社會時學哪招最不會出錯」, 但不被
+                     單一極端格綁架。純 maximin 在 60 格含崩潰格下會全策略並列 0 (無策略
+                     在所有社會都不團滅), 故軟化。ARENA_CVAR_K=1 即純 maximin。
   • minimax-regret — 每策略跨環境的最大「後悔值」(比該環境最優策略差多少) 取最小。
                      maximin 與它常選出不同策略, 那個分歧本身最有資訊量。
   • 環境排名       — 每策略當幾次冠軍格 / 進前 3 / 在幾格全滅。驗證 maximin 結論
@@ -27,7 +29,9 @@ W 由 ARENA_SURVIVAL_WEIGHT 調 (預設 1.0)。可切純 capital / share / age /
 用法 (純讀檔, 本機/容器皆可, 不跑模擬):
     python -u experiments/strategy_arena.py
 旋鈕 (env var):
-    ARENA_METRIC=capital|share   主指標 (預設 capital)
+    ARENA_METRIC=composite|capital|share|age|survived   主指標 (預設 composite)
+    ARENA_SURVIVAL_WEIGHT=1.0    composite 的 survived 權重 W
+    ARENA_CVAR_K=5               maximin 取最差幾格平均 (1 = 純 maximin)
     ARENA_SWEEP=<path>           指定輸入 JSON (預設取 output/ 最新 phase_sweep_*)
 """
 import glob
@@ -39,6 +43,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 METRIC = os.getenv("ARENA_METRIC", "composite")
 SURVIVAL_WEIGHT = float(os.getenv("ARENA_SURVIVAL_WEIGHT", "1.0"))
+CVAR_K = int(os.getenv("ARENA_CVAR_K", "5"))   # maximin 軟化: 取最差 k 格平均 (K=1 = 純 maximin)
 _VALID_METRICS = ("composite", "capital", "share", "age", "survived")
 
 
@@ -79,18 +84,23 @@ def build_matrix(payload, metric):
 
 
 def maximin(matrix):
-    """每策略跨 cell 取 min + 記最差格; 降序 (分數越高越穩健)。
+    """CVaR 軟化的 maximin: 每策略取「最差 CVAR_K 格的平均」(非絕對最差 1 格); 降序。
 
-    maximin 同分 (典型: 多個策略都有某『團滅格』分數=0) 時, 以「跨格平均分數」
-    tie-break —— 否則底部並列看似隨機; 平均高者代表整體較強, 排前面。
+    純 maximin (最差 1 格) 在 60 格含崩潰格下會全策略並列 0 —— 沒有策略在所有社會
+    都不團滅 (對稱地獄: 掠食者死於合作天堂、善良死於無名聲社會)。CVaR 看「最壞的
+    一批」平均, 區分『只 1 格全滅』與『24 格全滅』, 仍是風險趨避 (不被單一極端格綁架)。
+    CVAR_K=1 即退回純 maximin。同分以跨格平均 tie-break。worst_cell 記絕對最差那格。
     """
     out = []
     for name, row in matrix.items():
+        scores = sorted(row.values())              # 升序, 前 k 個是最差的一批
+        k = min(CVAR_K, len(scores))
+        cvar = sum(scores[:k]) / k
         worst_cell = min(row, key=row.get)
         mean_score = sum(row.values()) / len(row)
-        out.append((name, row[worst_cell], worst_cell, mean_score))
+        out.append((name, cvar, worst_cell, mean_score))
     out.sort(key=lambda t: (t[1], t[3]), reverse=True)
-    return [(n, mn, c) for n, mn, c, _ in out]
+    return [(n, c, w) for n, c, w, _ in out]
 
 
 def minimax_regret(matrix):
@@ -140,19 +150,20 @@ def print_arena_table(payload, metric):
     print(f"\n=== 策略擂台 | 主指標={metric_label} | {n_cells} 環境格 "
           f"(preset×churn×knockout) | reps={cfg.get('reps', '?')} ===")
     print("⚠ 量的是『在當前 16 策略共存社會中』採用某策略的穩健性, 非脈絡無關內在價值。\n")
-    print(f"{'策略':<16} {'maximin↑':>9} {'最差格':<34} {'mean':>6} "
+    print(f"{'策略':<16} {f'CVaR↑(最差{CVAR_K})':>12} {'絕對最差格':<34} {'mean':>6} "
           f"{'maxRegret↓':>10} {'#冠軍':>5} {'#前3':>5} {'#全滅':>5}")
     print("-" * 100)
     for name, mmval, worst in mm:
         row = matrix[name]
         mean = sum(row.values()) / len(row)
         reg, _ = regret[name]
-        print(f"{name:<16} {mmval:>9.3f} {worst:<34} {mean:>6.3f} "
+        print(f"{name:<16} {mmval:>12.3f} {worst:<34} {mean:>6.3f} "
               f"{reg:>10.3f} {champ[name]:>5} {top3[name]:>5} {extinct[name]:>5}")
 
     mm_winner = mm[0]
     rg = minimax_regret(matrix)[0]
-    print(f"\n→ maximin 冠軍: {mm_winner[0]} (最壞 {metric}={mm_winner[1]:.3f} @ {mm_winner[2]})")
+    print(f"\n→ CVaR(最差{CVAR_K}格平均) 冠軍: {mm_winner[0]} "
+          f"(CVaR {metric}={mm_winner[1]:.3f}, 絕對最差格 @ {mm_winner[2]})")
     print(f"→ minimax-regret 冠軍: {rg[0]} (最大後悔 {rg[1]:.3f} @ {rg[2]})")
     if mm_winner[0] != rg[0]:
         print("  (兩準則選出不同策略 —— maximin 保絕對下限, regret 保『不比當下最優差太多』)")
@@ -174,6 +185,7 @@ def main():
         "source": os.path.basename(path),
         "metric": METRIC,
         "survival_weight": SURVIVAL_WEIGHT if METRIC == "composite" else None,
+        "cvar_k": CVAR_K,
         "n_cells": len(next(iter(matrix.values()))),
         "maximin": [{"strategy": n, "score": v, "worst_cell": c} for n, v, c in mm],
         "minimax_regret": [{"strategy": n, "max_regret": r, "worst_cell": c}
