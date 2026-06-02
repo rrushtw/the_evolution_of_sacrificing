@@ -20,6 +20,11 @@ logs/
 *.log
 output/
 
+# results/ 只納版控 .md(敘事/相圖)；資料 artifact(json/raw txt)以重現指令重跑取得，不入版控
+results/**
+!results/**/
+!results/**/*.md
+
 # Claude planning / scratch
 claude_tasks/
 
