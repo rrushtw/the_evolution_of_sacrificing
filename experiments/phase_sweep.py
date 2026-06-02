@@ -67,6 +67,7 @@ PRESETS = [p.strip() for p in
            if p.strip()]
 
 TYPES = simulation.load_all_strategies()
+STRATEGY_NAMES = [t.__name__ for t in TYPES]
 N = len(TYPES) * GameConfig.INITIAL_COPIES
 
 
@@ -109,6 +110,29 @@ def _one_run(preset, churn, blind_rep, blind_priv, seed):
     fc = result["final_counts"]
     total = sum(fc.values()) or 1
     winner = max(fc, key=fc.get) if fc else None
+
+    # per-strategy 明細 (策略當主體的 maximin 擂台用) —— 從 final_population 即時聚
+    # 個體 capital/age, 零引擎改動 (本來就回傳, 過去被丟掉)。對「全 STRATEGY_NAMES」
+    # 產生, 絕種策略補一筆零分 (share/capital/age/survived 全 0): maximin 視絕種為
+    # 最差命運才能重罰它, 否則會反向偏袒「只在友善環境繁榮、惡劣環境直接消失」的脆弱策略。
+    caps = defaultdict(list)
+    ages = defaultdict(list)
+    for agent in result["final_population"]:
+        name = type(agent).__name__
+        caps[name].append(agent.capital)
+        ages[name].append(agent.age)
+    per_strategy = {}
+    for name in STRATEGY_NAMES:
+        cnt = fc.get(name, 0)
+        cl = caps.get(name, [])
+        al = ages.get(name, [])
+        per_strategy[name] = {
+            "share": cnt / total,
+            "capital": (sum(cl) / len(cl)) if cl else 0.0,
+            "age": (sum(al) / len(al)) if al else 0.0,
+            "survived": 1.0 if cnt else 0.0,
+            "count": cnt,
+        }
     return {
         "nice": sum(v for k, v in fc.items() if k in NICE) / total,
         "capital_mean": last.get("capital_mean", 0.0),
@@ -116,6 +140,7 @@ def _one_run(preset, churn, blind_rep, blind_priv, seed):
         "reenc": last.get("re_encounter_rate", 0.0),
         "expl": float(last.get("exploitations", 0)),
         "winner": winner,
+        "per_strategy": per_strategy,
     }
 
 
@@ -234,7 +259,14 @@ def main():
         for r in runs:
             winners[r["winner"]] = winners.get(r["winner"], 0) + 1
         metrics["top_winner"] = max(winners, key=winners.get)
-        cells[key] = {"metrics": metrics, "winners": winners}
+        # per-strategy: 每策略 × 每欄跨 reps 聚 mean/std/ci95 (擂台分析的原料)。
+        per_strategy = {
+            name: {field: _agg([r["per_strategy"][name][field] for r in runs])
+                   for field in ("share", "capital", "age", "survived")}
+            for name in STRATEGY_NAMES
+        }
+        cells[key] = {"metrics": metrics, "winners": winners,
+                      "per_strategy": per_strategy}
 
     # ---- Console tables (one per preset) ----
     for preset in PRESETS:
