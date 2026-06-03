@@ -130,6 +130,7 @@ def run_evolution(
     stability_tolerance: int = GameConfig.STABILITY_TOLERANCE,
     max_generations: int = GameConfig.MAX_GENERATIONS,
     on_generation=None,
+    initial_population: list[BaseStrategy] | None = None,
 ) -> dict:
     """
     Run a full evolutionary simulation.
@@ -155,8 +156,16 @@ def run_evolution(
     `on_generation(generation, snapshot)` is called every generation with a
     dict snapshot for callers that want to stream / log. The simulation
     itself is silent — the caller owns all UI.
+
+    `initial_population` (optional): seed a custom, possibly non-equal mix of
+    pre-built agents instead of equal copies per type — used by the invasion /
+    ESS experiment (resident majority + invader minority). When None (default)
+    the population is the usual `_build_population(strategy_types, initial_copies)`.
     """
-    population = _build_population(strategy_types, initial_copies)
+    # `initial_population` lets callers seed a custom (e.g. non-equal) mix —
+    # used by the invasion / ESS experiment. Default keeps the equal-copies build.
+    population = (initial_population if initial_population is not None
+                  else _build_population(strategy_types, initial_copies))
     net = network.Network(population, GameConfig.AVG_DEGREE, assortment)
 
     counts = _count_by_type(population)
