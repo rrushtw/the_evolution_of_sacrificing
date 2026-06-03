@@ -67,6 +67,7 @@ PRESETS = [p.strip() for p in
            if p.strip()]
 
 TYPES = simulation.load_all_strategies()
+STRATEGY_NAMES = [t.__name__ for t in TYPES]
 N = len(TYPES) * GameConfig.INITIAL_COPIES
 
 
@@ -97,25 +98,51 @@ def _preset_rstar(name):
     return r
 
 
-def _one_run(preset, churn, blind_rep, blind_priv, seed):
+def _one_run(preset: str, churn: float, blind_rep: bool,
+             blind_priv: bool, seed: int) -> dict:
+    """跑一個複本, 回傳該 run 的相圖指標 + per-strategy 明細 (皆 0-1 / 計數值)。"""
     random.seed(seed)
     _apply_preset(preset)
     GameConfig.BLIND_REPUTATION = blind_rep
     GameConfig.BLIND_PRIVATE = blind_priv
-    last = {}
+    last_snapshot: dict = {}
     result = simulation.run_evolution(
         TYPES, churn_rate=churn, max_generations=GENS,
-        on_generation=lambda g, s: last.update(s))
-    fc = result["final_counts"]
-    total = sum(fc.values()) or 1
-    winner = max(fc, key=fc.get) if fc else None
+        on_generation=lambda generation, snapshot: last_snapshot.update(snapshot))
+    final_counts = result["final_counts"]
+    total = sum(final_counts.values()) or 1
+    winner = max(final_counts, key=final_counts.get) if final_counts else None
+
+    # per-strategy 明細 (策略當主體的 maximin 擂台用) —— 從 final_population 即時聚
+    # 個體 capital/age, 零引擎改動 (本來就回傳, 過去被丟掉)。對「全 STRATEGY_NAMES」
+    # 產生, 絕種策略補一筆零分 (share/capital/age/survived 全 0): maximin 視絕種為
+    # 最差命運才能重罰它, 否則會反向偏袒「只在友善環境繁榮、惡劣環境直接消失」的脆弱策略。
+    capitals_by_strategy: dict[str, list[float]] = defaultdict(list)
+    ages_by_strategy: dict[str, list[float]] = defaultdict(list)
+    for agent in result["final_population"]:
+        strategy_name = type(agent).__name__
+        capitals_by_strategy[strategy_name].append(agent.capital)
+        ages_by_strategy[strategy_name].append(agent.age)
+    per_strategy: dict[str, dict] = {}
+    for strategy_name in STRATEGY_NAMES:
+        count = final_counts.get(strategy_name, 0)
+        capitals = capitals_by_strategy.get(strategy_name, [])
+        agent_ages = ages_by_strategy.get(strategy_name, [])
+        per_strategy[strategy_name] = {
+            "share": count / total,
+            "capital": (sum(capitals) / len(capitals)) if capitals else 0.0,
+            "age": (sum(agent_ages) / len(agent_ages)) if agent_ages else 0.0,
+            "survived": 1.0 if count else 0.0,
+            "count": count,
+        }
     return {
-        "nice": sum(v for k, v in fc.items() if k in NICE) / total,
-        "capital_mean": last.get("capital_mean", 0.0),
-        "gini": last.get("capital_gini", 0.0),
-        "reenc": last.get("re_encounter_rate", 0.0),
-        "expl": float(last.get("exploitations", 0)),
+        "nice": sum(cnt for name, cnt in final_counts.items() if name in NICE) / total,
+        "capital_mean": last_snapshot.get("capital_mean", 0.0),
+        "gini": last_snapshot.get("capital_gini", 0.0),
+        "reenc": last_snapshot.get("re_encounter_rate", 0.0),
+        "expl": float(last_snapshot.get("exploitations", 0)),
         "winner": winner,
+        "per_strategy": per_strategy,
     }
 
 
@@ -234,7 +261,14 @@ def main():
         for r in runs:
             winners[r["winner"]] = winners.get(r["winner"], 0) + 1
         metrics["top_winner"] = max(winners, key=winners.get)
-        cells[key] = {"metrics": metrics, "winners": winners}
+        # per-strategy: 每策略 × 每欄跨 reps 聚 mean/std/ci95 (擂台分析的原料)。
+        per_strategy = {
+            name: {field: _agg([r["per_strategy"][name][field] for r in runs])
+                   for field in ("share", "capital", "age", "survived")}
+            for name in STRATEGY_NAMES
+        }
+        cells[key] = {"metrics": metrics, "winners": winners,
+                      "per_strategy": per_strategy}
 
     # ---- Console tables (one per preset) ----
     for preset in PRESETS:

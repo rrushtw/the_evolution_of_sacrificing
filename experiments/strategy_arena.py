@@ -1,0 +1,213 @@
+"""
+Strategy arena — 把「環境相圖」翻成「策略擂台」(策略當主體,非環境)。
+
+phase_sweep.py 跑出的 JSON 裡, 每個環境格子 (preset × churn × knockout) 都帶
+per-strategy 明細 (share / capital / age / survived)。本腳本「純讀那份 JSON、零模擬」,
+把它轉成「策略 × 環境」矩陣, 算個人決策者該看的穩健性準則:
+
+  • maximin (CVaR 軟化) — 每策略取「最差 CVAR_K 格的平均」(預設最差 5 格, 非絕對最差
+                     1 格)。風險趨避「不知命運丟我進哪種社會時學哪招最不會出錯」, 但不被
+                     單一極端格綁架。純 maximin 在 60 格含崩潰格下會全策略並列 0 (無策略
+                     在所有社會都不團滅), 故軟化。ARENA_CVAR_K=1 即純 maximin。
+  • minimax-regret — 每策略跨環境的最大「後悔值」(比該環境最優策略差多少) 取最小。
+                     maximin 與它常選出不同策略, 那個分歧本身最有資訊量。
+  • 環境排名       — 每策略當幾次冠軍格 / 進前 3 / 在幾格全滅。驗證 maximin 結論
+                     是否被單一退化格綁架。
+
+主指標預設 composite (複合分數 = capital + W·survived): 「活著時過得多好」加上
+「不被團滅的價值」—— 風險趨避者最怕的是某種社會把整個策略團滅, 故給存活率額外權重。
+W 由 ARENA_SURVIVAL_WEIGHT 調 (預設 1.0)。可切純 capital / share / age / survived。
+
+⚠ maximin 取「最差格」: 凡在任一環境格會被『團滅』(該格平均存活率=0→分數=0) 的策略,
+其 maximin 觸底並列 0 —— 這是 maximin 對風險趨避者的誠實結論 (有種社會會滅了你 = 不可採用)。
+為免底部並列看似隨機, maximin 同分時以「跨格平均分數」tie-break 排序。
+
+⚠ 前提 (務必連同結論一起讀): 沙盒是「16 策略生態混戰」(非兩兩對局、非 invasion),
+每策略表現都受同場其他 15 策略影響。故本擂台量的是「在當前 16 策略共存的社會中」
+採用某策略的穩健性, 非脈絡無關的內在價值。增刪策略可能翻盤。
+
+用法 (純讀檔, 本機/容器皆可, 不跑模擬):
+    python -u experiments/strategy_arena.py
+旋鈕 (env var):
+    ARENA_METRIC=composite|capital|share|age|survived   主指標 (預設 composite)
+    ARENA_SURVIVAL_WEIGHT=1.0    composite 的 survived 權重 W
+    ARENA_CVAR_K=5               maximin 取最差幾格平均 (1 = 純 maximin)
+    ARENA_SWEEP=<path>           指定輸入 JSON (預設取 output/ 最新 phase_sweep_*)
+"""
+import glob
+import json
+import os
+import sys
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+METRIC = os.getenv("ARENA_METRIC", "composite")
+SURVIVAL_WEIGHT = float(os.getenv("ARENA_SURVIVAL_WEIGHT", "1.0"))
+CVAR_K = int(os.getenv("ARENA_CVAR_K", "5"))   # maximin 軟化: 取最差 k 格平均 (K=1 = 純 maximin)
+_VALID_METRICS = ("composite", "capital", "share", "age", "survived")
+
+
+def load_latest_sweep(path: str | None = None) -> tuple[dict, str]:
+    """讀指定或 output/ 最新的 phase_sweep_*.json; 缺 per_strategy 欄 → 明確報錯。
+
+    回傳 (payload_dict, 實際讀取路徑)。
+    """
+    if path is None:
+        # [0-9]* 排除 phase_sweep_checkpoint.json
+        cands = sorted(glob.glob(os.path.join(_ROOT, "output", "phase_sweep_[0-9]*.json")))
+        if not cands:
+            sys.exit("✗ output/ 找不到 phase_sweep_*.json — 先跑 experiments/phase_sweep.py")
+        path = cands[-1]
+    with open(path) as f:
+        payload = json.load(f)
+    cells = payload.get("cells", {})
+    if not cells:
+        sys.exit(f"✗ {path} 沒有 cells")
+    sample = next(iter(cells.values()))
+    if "per_strategy" not in sample:
+        sys.exit(f"✗ {path} 是舊版 (無 per_strategy 欄) —— 請以新版 phase_sweep 重跑後再分析")
+    return payload, path
+
+
+def build_matrix(payload: dict, metric: str) -> dict:
+    """回傳 {strategy: {cell_key: score}}, score 取該 cell 該策略該指標的 mean。
+
+    metric="composite" 時 score = capital.mean + SURVIVAL_WEIGHT·survived.mean
+    (活著時過得多好 + 不被團滅的價值); 其餘直接取該欄 mean。
+    """
+    matrix = {}
+    for cell_key, cell in payload["cells"].items():
+        for name, fields in cell["per_strategy"].items():
+            if metric == "composite":
+                score = fields["capital"]["mean"] + SURVIVAL_WEIGHT * fields["survived"]["mean"]
+            else:
+                score = fields[metric]["mean"]
+            matrix.setdefault(name, {})[cell_key] = score
+    return matrix
+
+
+def maximin(matrix: dict) -> list:
+    """CVaR 軟化的 maximin: 每策略取「最差 CVAR_K 格的平均」(非絕對最差 1 格); 降序。
+
+    回傳 [(strategy, cvar, worst_cell), ...] (依 cvar 降序)。
+
+    純 maximin (最差 1 格) 在 60 格含崩潰格下會全策略並列 0 —— 沒有策略在所有社會
+    都不團滅 (對稱地獄: 掠食者死於合作天堂、善良死於無名聲社會)。CVaR 看「最壞的
+    一批」平均, 區分『只 1 格全滅』與『24 格全滅』, 仍是風險趨避 (不被單一極端格綁架)。
+    CVAR_K=1 即退回純 maximin。同分以跨格平均 tie-break。worst_cell 記絕對最差那格。
+    """
+    out = []
+    for name, row in matrix.items():
+        scores = sorted(row.values())              # 升序, 前 k 個是最差的一批
+        k = min(CVAR_K, len(scores))
+        cvar = sum(scores[:k]) / k
+        worst_cell = min(row, key=row.get)
+        mean_score = sum(row.values()) / len(row)
+        out.append((name, cvar, worst_cell, mean_score))
+    out.sort(key=lambda t: (t[1], t[3]), reverse=True)
+    return [(n, c, w) for n, c, w, _ in out]
+
+
+def minimax_regret(matrix: dict) -> list:
+    """每 cell 算 best; 每策略 max-regret + 發生格; 升序 (後悔越小越好)。
+
+    回傳 [(strategy, max_regret, worst_cell), ...] (依 max_regret 升序)。
+    """
+    cells = next(iter(matrix.values())).keys()
+    best = {e: max(matrix[s][e] for s in matrix) for e in cells}
+    out = []
+    for name, row in matrix.items():
+        regrets = {e: best[e] - row[e] for e in cells}
+        worst_cell = max(regrets, key=regrets.get)
+        out.append((name, regrets[worst_cell], worst_cell))
+    return sorted(out, key=lambda t: t[1])
+
+
+def env_rankings(matrix: dict, survived: dict) -> tuple[dict, dict, dict]:
+    """每策略: #冠軍格 (該格 score 最高, 含並列) / #前3格 / #全滅格 (survived mean==0)。
+
+    回傳 (champion_counts, top3_counts, extinct_counts) 三個 {strategy: int}。
+    """
+    cells = next(iter(matrix.values())).keys()
+    champ = {s: 0 for s in matrix}
+    top3 = {s: 0 for s in matrix}
+    extinct = {s: 0 for s in matrix}
+    for e in cells:
+        scores = {s: matrix[s][e] for s in matrix}
+        best = max(scores.values())
+        ordered = sorted(scores.values(), reverse=True)
+        third = ordered[min(2, len(ordered) - 1)]
+        for s in matrix:
+            if scores[s] >= best:
+                champ[s] += 1
+            if scores[s] >= third:
+                top3[s] += 1
+            if survived[s][e] == 0.0:
+                extinct[s] += 1
+    return champ, top3, extinct
+
+
+def print_arena_table(payload: dict, metric: str) -> tuple:
+    matrix = build_matrix(payload, metric)
+    survived = build_matrix(payload, "survived")
+    mm = maximin(matrix)
+    regret = dict((n, (r, c)) for n, r, c in minimax_regret(matrix))
+    champ, top3, extinct = env_rankings(matrix, survived)
+    n_cells = len(next(iter(matrix.values())))
+
+    cfg = payload.get("config", {})
+    metric_label = (f"composite(capital+{SURVIVAL_WEIGHT:g}·survived)"
+                    if metric == "composite" else metric)
+    print(f"\n=== 策略擂台 | 主指標={metric_label} | {n_cells} 環境格 "
+          f"(preset×churn×knockout) | reps={cfg.get('reps', '?')} ===")
+    print("⚠ 量的是『在當前 16 策略共存社會中』採用某策略的穩健性, 非脈絡無關內在價值。\n")
+    print(f"{'策略':<16} {f'CVaR↑(最差{CVAR_K})':>12} {'絕對最差格':<34} {'mean':>6} "
+          f"{'maxRegret↓':>10} {'#冠軍':>5} {'#前3':>5} {'#全滅':>5}")
+    print("-" * 100)
+    for name, mmval, worst in mm:
+        row = matrix[name]
+        mean = sum(row.values()) / len(row)
+        reg, _ = regret[name]
+        print(f"{name:<16} {mmval:>12.3f} {worst:<34} {mean:>6.3f} "
+              f"{reg:>10.3f} {champ[name]:>5} {top3[name]:>5} {extinct[name]:>5}")
+
+    mm_winner = mm[0]
+    rg = minimax_regret(matrix)[0]
+    print(f"\n→ CVaR(最差{CVAR_K}格平均) 冠軍: {mm_winner[0]} "
+          f"(CVaR {metric}={mm_winner[1]:.3f}, 絕對最差格 @ {mm_winner[2]})")
+    print(f"→ minimax-regret 冠軍: {rg[0]} (最大後悔 {rg[1]:.3f} @ {rg[2]})")
+    if mm_winner[0] != rg[0]:
+        print("  (兩準則選出不同策略 —— maximin 保絕對下限, regret 保『不比當下最優差太多』)")
+    return matrix, mm, regret, (champ, top3, extinct)
+
+
+def main() -> None:
+    if METRIC not in _VALID_METRICS:
+        sys.exit(f"✗ ARENA_METRIC={METRIC} 不合法, 須為 {_VALID_METRICS}")
+    payload, path = load_latest_sweep(os.getenv("ARENA_SWEEP"))
+    print(f"讀入: {path}")
+    matrix, mm, regret, ranks = print_arena_table(payload, METRIC)
+
+    # 存一份分析快照 (純衍生自 sweep JSON)。
+    champ, top3, extinct = ranks
+    stamp = os.path.basename(path).replace("phase_sweep_", "").replace(".json", "")
+    out_path = os.path.join(_ROOT, "output", f"strategy_arena_{stamp}.json")
+    result = {
+        "source": os.path.basename(path),
+        "metric": METRIC,
+        "survival_weight": SURVIVAL_WEIGHT if METRIC == "composite" else None,
+        "cvar_k": CVAR_K,
+        "n_cells": len(next(iter(matrix.values()))),
+        "maximin": [{"strategy": n, "score": v, "worst_cell": c} for n, v, c in mm],
+        "minimax_regret": [{"strategy": n, "max_regret": r, "worst_cell": c}
+                           for n, r, c in minimax_regret(matrix)],
+        "env_rankings": {s: {"champion": champ[s], "top3": top3[s], "extinct": extinct[s]}
+                         for s in matrix},
+    }
+    with open(out_path, "w") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+    print(f"\nSaved → ./output/strategy_arena_{stamp}.json")
+
+
+if __name__ == "__main__":
+    main()
