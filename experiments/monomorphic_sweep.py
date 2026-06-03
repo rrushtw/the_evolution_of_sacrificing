@@ -77,61 +77,65 @@ STRATEGY_BY_NAME = {t.__name__: t for t in TYPES}
 STRATEGY_NAMES = sorted(STRATEGY_BY_NAME)
 
 
-def _one_run(strategy_cls, churn, blind_rep, blind_priv, seed):
+def _one_run(strategy_cls: type, churn: float, blind_rep: bool,
+             blind_priv: bool, seed: int) -> dict[str, float]:
     """一個 (策略, churn, knockout, seed) 複本:單型族群跑 T 代, 回末 K 代平均的社會福祉。
 
     自驅 engine.run_round —— 固定 N 人、不繁殖不死亡, 繞開 run_evolution 的單型早停。
     每代設定即覆寫 (preset/BLIND_*), 不必還原:下一個 run 開頭一律重設。
+    回傳 {good_share, expl, expl_norm, capital_mean} 四個社會福祉純量。
     """
     random.seed(seed)
     _apply_preset("default")
     GameConfig.BLIND_REPUTATION = blind_rep
     GameConfig.BLIND_PRIVATE = blind_priv
 
-    pop = [strategy_cls() for _ in range(MONO_N)]
-    net = network.Network(pop, GameConfig.AVG_DEGREE, GameConfig.ASSORTMENT)
+    population = [strategy_cls() for _ in range(MONO_N)]
+    social_net = network.Network(population, GameConfig.AVG_DEGREE,
+                                 GameConfig.ASSORTMENT)
 
     tail = deque(maxlen=TAIL)
     warmup = max(0, GENS - TAIL)   # 只在末 K 代收統計 (前面是 burn-in)
-    for g in range(GENS):
+    for generation in range(GENS):
         stats = engine.run_round(
-            pop, net,
+            population, social_net,
             noise=GameConfig.NOISE_RATE,
             encounters_per_agent=GameConfig.ENCOUNTERS_PER_AGENT,
             churn_rate=churn,
         )
-        for agent in pop:
+        for agent in population:
             agent.recover()
-        if g >= warmup:
-            rep = _reputation_distribution(pop)   # {"Good": n, "Bad": n}
-            good = rep.get("Good", 0)
-            denom = sum(rep.values())
-            cap = _capital_stats(pop)
+        if generation >= warmup:
+            reputation = _reputation_distribution(population)   # {"Good": n, "Bad": n}
+            good_count = reputation.get("Good", 0)
+            total_count = sum(reputation.values())
+            capital_stats = _capital_stats(population)
             # gini 不收:無 mortality 下 capital 可為負, 而 _gini 假設非負 → 對負值失真。
             tail.append({
-                "good_share": (good / denom) if denom else 0.0,
+                "good_share": (good_count / total_count) if total_count else 0.0,
                 "expl": float(stats["exploitations"]),
-                "capital_mean": cap["capital_mean"],
+                "capital_mean": capital_stats["capital_mean"],
             })
 
-    def _mean(field):
-        return sum(t[field] for t in tail) / len(tail) if tail else 0.0
+    def _tail_mean(field: str) -> float:
+        return sum(snap[field] for snap in tail) / len(tail) if tail else 0.0
 
-    expl = _mean("expl")
+    expl = _tail_mean("expl")
     return {
-        "good_share": _mean("good_share"),
+        "good_share": _tail_mean("good_share"),
         "expl": expl,
         "expl_norm": min(1.0, expl / MONO_N),
-        "capital_mean": _mean("capital_mean"),
+        "capital_mean": _tail_mean("capital_mean"),
     }
 
 
-def _worker(task):
-    """One replicate, own process. Returns (key, sname, churn, label, metrics)."""
-    sname, churn, label, blind_rep, blind_priv, seed = task
-    key = _run_key(sname, churn, label, seed)
-    cls = STRATEGY_BY_NAME[sname]
-    return key, sname, churn, label, _one_run(cls, churn, blind_rep, blind_priv, seed)
+def _worker(task: tuple) -> tuple:
+    """跑單一複本 (獨立進程)。回傳 (key, strategy_name, churn, label, metrics)。"""
+    strategy_name, churn, label, blind_rep, blind_priv, seed = task
+    key = _run_key(strategy_name, churn, label, seed)
+    strategy_cls = STRATEGY_BY_NAME[strategy_name]
+    metrics = _one_run(strategy_cls, churn, blind_rep, blind_priv, seed)
+    return key, strategy_name, churn, label, metrics
 
 
 # ---- Checkpoint (resumable across interrupts) -------------------------------
@@ -140,18 +144,19 @@ CKPT_PATH = os.getenv(
     os.path.join(_ROOT, "output", "monomorphic_sweep_checkpoint.json"))
 
 
-def _run_key(sname, churn, label, seed):
-    return f"{sname}|{churn}|{label}|{seed}"
+def _run_key(strategy_name: str, churn: float, label: str, seed: int) -> str:
+    """單一複本的穩定 id (同設定跨次重跑不變, 供 checkpoint 比對)。"""
+    return f"{strategy_name}|{churn}|{label}|{seed}"
 
 
-def _signature():
+def _signature() -> dict:
     """Config fingerprint; mismatch → old checkpoint can't be reused."""
     return {"reps": REPS, "generations": GENS, "base_seed": BASE_SEED,
-            "churn_grid": CHURNS, "knockouts": [k[0] for k in KNOCKOUTS],
+            "churn_grid": CHURNS, "knockouts": [label for label, _, _ in KNOCKOUTS],
             "N": MONO_N, "tail": TAIL, "strategies": len(STRATEGY_NAMES)}
 
 
-def _load_checkpoint():
+def _load_checkpoint() -> dict:
     if not os.path.exists(CKPT_PATH):
         return {}
     try:
@@ -166,41 +171,43 @@ def _load_checkpoint():
     return data.get("runs", {})
 
 
-def _save_checkpoint(runs):
+def _save_checkpoint(runs: dict) -> None:
     """Atomic write (tmp + replace) so a kill mid-flush never corrupts the file."""
     os.makedirs(os.path.dirname(CKPT_PATH), exist_ok=True)
-    tmp = CKPT_PATH + ".tmp"
-    with open(tmp, "w") as f:
+    tmp_path = CKPT_PATH + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump({"signature": _signature(), "runs": runs}, f, ensure_ascii=False)
-    os.replace(tmp, CKPT_PATH)
+    os.replace(tmp_path, CKPT_PATH)
 
 
-def _cvar(values, k):
+def _cvar(values: list[float], k: int) -> float:
     """最差 k 格平均 (CVaR 軟化 maximin);k>=len 即取全部 = mean。"""
-    s = sorted(values)
-    kk = min(k, len(s)) or 1
-    return sum(s[:kk]) / kk
+    ordered = sorted(values)
+    k_effective = min(k, len(ordered)) or 1
+    return sum(ordered[:k_effective]) / k_effective
 
 
-def main():
-    all_tasks = [(sname, churn, label, br, bp, BASE_SEED + i)
-                 for sname in STRATEGY_NAMES
+def main() -> None:
+    all_tasks = [(strategy_name, churn, label, blind_rep, blind_priv, BASE_SEED + rep_idx)
+                 for strategy_name in STRATEGY_NAMES
                  for churn in CHURNS
-                 for label, br, bp in KNOCKOUTS
-                 for i in range(REPS)]
+                 for label, blind_rep, blind_priv in KNOCKOUTS
+                 for rep_idx in range(REPS)]
     jobs = int(os.getenv("JOBS", str(multiprocessing.cpu_count() or 1)))
     total = len(all_tasks)
 
     done_runs = _load_checkpoint()
     by_cell = defaultdict(list)
-    for rec in done_runs.values():
-        by_cell[(rec["sname"], rec["churn"], rec["label"])].append(rec["metrics"])
-    tasks = [t for t in all_tasks
-             if _run_key(t[0], t[1], t[2], t[5]) not in done_runs]
+    for record in done_runs.values():
+        cell = (record["strategy"], record["churn"], record["label"])
+        by_cell[cell].append(record["metrics"])
+    tasks = [task for task in all_tasks
+             if _run_key(task[0], task[1], task[2], task[5]) not in done_runs]
 
     print(f"Monomorphic sweep | strategies={len(STRATEGY_NAMES)} N={MONO_N} | "
           f"REPS={REPS} GENS={GENS} tail={TAIL} base_seed={BASE_SEED} jobs={jobs}")
-    print(f"churn grid: {CHURNS} | knockouts: {[k[0] for k in KNOCKOUTS]} | preset=default")
+    print(f"churn grid: {CHURNS} | "
+          f"knockouts: {[label for label, _, _ in KNOCKOUTS]} | preset=default")
     if done_runs:
         print(f"resume: {len(done_runs)}/{total} 已完成 (checkpoint {CKPT_PATH}),"
               f" 續跑剩 {len(tasks)}")
@@ -212,10 +219,10 @@ def main():
         done = len(done_runs)
         since_flush = 0
         step = max(1, total // 20)
-        for key, sname, churn, label, m in pool.imap_unordered(_worker, tasks):
-            by_cell[(sname, churn, label)].append(m)
-            done_runs[key] = {"sname": sname, "churn": churn,
-                              "label": label, "metrics": m}
+        for key, strategy_name, churn, label, metrics in pool.imap_unordered(_worker, tasks):
+            by_cell[(strategy_name, churn, label)].append(metrics)
+            done_runs[key] = {"strategy": strategy_name, "churn": churn,
+                              "label": label, "metrics": metrics}
             done += 1
             since_flush += 1
             if since_flush >= flush_every:
@@ -227,25 +234,28 @@ def main():
 
     # ---- Aggregate cells ----
     cells = {}
-    for key, runs in by_cell.items():
-        metrics = {k: _agg([r[k] for r in runs])
-                   for k in ("good_share", "expl_norm", "capital_mean")}
-        cells[key] = {"metrics": metrics}
+    for cell, runs in by_cell.items():
+        metrics = {field: _agg([run[field] for run in runs])
+                   for field in ("good_share", "expl_norm", "capital_mean")}
+        cells[cell] = {"metrics": metrics}
 
     # ---- Console: 每策略跨格 good_share + CVaR-maximin 排行 ----
-    labels = [k[0] for k in KNOCKOUTS]
-    matrix = {s: {} for s in STRATEGY_NAMES}   # {strategy: {cellkey: good_share.mean}}
-    for (s, c, lab), v in cells.items():
-        matrix[s][f"churn={c}|{lab}"] = v["metrics"]["good_share"]["mean"]
+    labels = [label for label, _, _ in KNOCKOUTS]
+    # {strategy: {cell_key: good_share.mean}}
+    matrix = {strategy_name: {} for strategy_name in STRATEGY_NAMES}
+    for (strategy_name, churn, label), cell in cells.items():
+        matrix[strategy_name][f"churn={churn}|{label}"] = \
+            cell["metrics"]["good_share"]["mean"]
 
     ranking = []
-    for s in STRATEGY_NAMES:
-        vals = list(matrix[s].values())
-        cvar = _cvar(vals, CVAR_K)
-        mean = sum(vals) / len(vals) if vals else 0.0
-        worst_cell = min(matrix[s], key=matrix[s].get) if matrix[s] else "-"
-        ranking.append((s, cvar, mean, worst_cell))
-    ranking.sort(key=lambda t: (t[1], t[2]), reverse=True)
+    for strategy_name in STRATEGY_NAMES:
+        good_shares = list(matrix[strategy_name].values())
+        cvar = _cvar(good_shares, CVAR_K)
+        mean_share = sum(good_shares) / len(good_shares) if good_shares else 0.0
+        worst_cell = (min(matrix[strategy_name], key=matrix[strategy_name].get)
+                      if matrix[strategy_name] else "-")
+        ranking.append((strategy_name, cvar, mean_share, worst_cell))
+    ranking.sort(key=lambda entry: (entry[1], entry[2]), reverse=True)
 
     n_cells = len(CHURNS) * len(KNOCKOUTS)
     print(f"\n=== 單型社會福祉擂台 | Y=good_share (末{TAIL}代均) | "
@@ -253,21 +263,22 @@ def main():
     print("⚠ 量的是『假設全社會都採用某策略』的穩態信任/合作率, 非混戰中個人表現。\n")
     print(f"{'策略':<16} {f'CVaR↑(最差{CVAR_K})':>13} {'mean':>7} {'最差格':<26}")
     print("-" * 70)
-    for s, cvar, mean, worst in ranking:
-        print(f"{s:<16} {cvar:>13.3f} {mean:>7.3f} {worst:<26}")
+    for strategy_name, cvar, mean_share, worst_cell in ranking:
+        print(f"{strategy_name:<16} {cvar:>13.3f} {mean_share:>7.3f} {worst_cell:<26}")
     print(f"\n→ 單型最宜居 (CVaR good_share 冠軍): {ranking[0][0]} "
           f"(CVaR={ranking[0][1]:.3f}, 最差格 @ {ranking[0][3]})")
 
     # 社會剖面 (none-knockout): 看 capital / expl 輔助訊號
     if "none" in labels:
         print(f"\n--- 社會剖面 | knockout=none (capital_mean / expl_norm, n={REPS}) ---")
-        print("策略             " + "".join(f" churn={c:<4}" for c in CHURNS))
-        for s in STRATEGY_NAMES:
-            row = f"{s:<16}"
-            for c in CHURNS:
-                m = cells.get((s, c, "none"), {}).get("metrics")
-                if m:
-                    row += f" {m['capital_mean']['mean']:>4.1f}/{m['expl_norm']['mean']:>4.2f}"
+        print("策略             " + "".join(f" churn={churn:<4}" for churn in CHURNS))
+        for strategy_name in STRATEGY_NAMES:
+            row = f"{strategy_name:<16}"
+            for churn in CHURNS:
+                cell_metrics = cells.get((strategy_name, churn, "none"), {}).get("metrics")
+                if cell_metrics:
+                    row += (f" {cell_metrics['capital_mean']['mean']:>4.1f}"
+                            f"/{cell_metrics['expl_norm']['mean']:>4.2f}")
                 else:
                     row += "      -    "
             print(row)
@@ -276,16 +287,25 @@ def main():
     os.makedirs(os.path.join(_ROOT, "output"), exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = os.path.join(_ROOT, "output", f"monomorphic_sweep_{stamp}.json")
-    payload = {
-        "config": {"reps": REPS, "generations": GENS, "base_seed": BASE_SEED,
-                   "churn_grid": CHURNS, "knockouts": labels,
-                   "N": MONO_N, "tail": TAIL, "preset": "default",
-                   "primary": "good_share", "cvar_k": CVAR_K,
-                   "strategies": len(STRATEGY_NAMES),
-                   "duration_seconds": round(time.time() - started, 1)},
-        "cells": {f"strategy={s}|churn={c}|{lab}": v
-                  for (s, c, lab), v in cells.items()},
+    config = {
+        "reps": REPS,
+        "generations": GENS,
+        "base_seed": BASE_SEED,
+        "churn_grid": CHURNS,
+        "knockouts": labels,
+        "N": MONO_N,
+        "tail": TAIL,
+        "preset": "default",
+        "primary": "good_share",
+        "cvar_k": CVAR_K,
+        "strategies": len(STRATEGY_NAMES),
+        "duration_seconds": round(time.time() - started, 1),
     }
+    serialized_cells = {
+        f"strategy={strategy_name}|churn={churn}|{label}": cell
+        for (strategy_name, churn, label), cell in cells.items()
+    }
+    payload = {"config": config, "cells": serialized_cells}
     with open(path, "w") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
     print(f"\nSaved → ./output/monomorphic_sweep_{stamp}.json  "

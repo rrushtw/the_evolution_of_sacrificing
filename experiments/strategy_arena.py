@@ -47,8 +47,11 @@ CVAR_K = int(os.getenv("ARENA_CVAR_K", "5"))   # maximin 軟化: 取最差 k 格
 _VALID_METRICS = ("composite", "capital", "share", "age", "survived")
 
 
-def load_latest_sweep(path=None):
-    """讀指定或 output/ 最新的 phase_sweep_*.json; 缺 per_strategy 欄 → 明確報錯。"""
+def load_latest_sweep(path: str | None = None) -> tuple[dict, str]:
+    """讀指定或 output/ 最新的 phase_sweep_*.json; 缺 per_strategy 欄 → 明確報錯。
+
+    回傳 (payload_dict, 實際讀取路徑)。
+    """
     if path is None:
         # [0-9]* 排除 phase_sweep_checkpoint.json
         cands = sorted(glob.glob(os.path.join(_ROOT, "output", "phase_sweep_[0-9]*.json")))
@@ -66,7 +69,7 @@ def load_latest_sweep(path=None):
     return payload, path
 
 
-def build_matrix(payload, metric):
+def build_matrix(payload: dict, metric: str) -> dict:
     """回傳 {strategy: {cell_key: score}}, score 取該 cell 該策略該指標的 mean。
 
     metric="composite" 時 score = capital.mean + SURVIVAL_WEIGHT·survived.mean
@@ -83,8 +86,10 @@ def build_matrix(payload, metric):
     return matrix
 
 
-def maximin(matrix):
+def maximin(matrix: dict) -> list:
     """CVaR 軟化的 maximin: 每策略取「最差 CVAR_K 格的平均」(非絕對最差 1 格); 降序。
+
+    回傳 [(strategy, cvar, worst_cell), ...] (依 cvar 降序)。
 
     純 maximin (最差 1 格) 在 60 格含崩潰格下會全策略並列 0 —— 沒有策略在所有社會
     都不團滅 (對稱地獄: 掠食者死於合作天堂、善良死於無名聲社會)。CVaR 看「最壞的
@@ -103,8 +108,11 @@ def maximin(matrix):
     return [(n, c, w) for n, c, w, _ in out]
 
 
-def minimax_regret(matrix):
-    """每 cell 算 best; 每策略 max-regret + 發生格; 升序 (後悔越小越好)。"""
+def minimax_regret(matrix: dict) -> list:
+    """每 cell 算 best; 每策略 max-regret + 發生格; 升序 (後悔越小越好)。
+
+    回傳 [(strategy, max_regret, worst_cell), ...] (依 max_regret 升序)。
+    """
     cells = next(iter(matrix.values())).keys()
     best = {e: max(matrix[s][e] for s in matrix) for e in cells}
     out = []
@@ -115,8 +123,11 @@ def minimax_regret(matrix):
     return sorted(out, key=lambda t: t[1])
 
 
-def env_rankings(matrix, survived):
-    """每策略: #冠軍格 (該格 score 最高, 含並列) / #前3格 / #全滅格 (survived mean==0)。"""
+def env_rankings(matrix: dict, survived: dict) -> tuple[dict, dict, dict]:
+    """每策略: #冠軍格 (該格 score 最高, 含並列) / #前3格 / #全滅格 (survived mean==0)。
+
+    回傳 (champion_counts, top3_counts, extinct_counts) 三個 {strategy: int}。
+    """
     cells = next(iter(matrix.values())).keys()
     champ = {s: 0 for s in matrix}
     top3 = {s: 0 for s in matrix}
@@ -136,7 +147,7 @@ def env_rankings(matrix, survived):
     return champ, top3, extinct
 
 
-def print_arena_table(payload, metric):
+def print_arena_table(payload: dict, metric: str) -> tuple:
     matrix = build_matrix(payload, metric)
     survived = build_matrix(payload, "survived")
     mm = maximin(matrix)
@@ -170,7 +181,7 @@ def print_arena_table(payload, metric):
     return matrix, mm, regret, (champ, top3, extinct)
 
 
-def main():
+def main() -> None:
     if METRIC not in _VALID_METRICS:
         sys.exit(f"✗ ARENA_METRIC={METRIC} 不合法, 須為 {_VALID_METRICS}")
     payload, path = load_latest_sweep(os.getenv("ARENA_SWEEP"))
