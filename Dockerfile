@@ -4,6 +4,11 @@ FROM mcr.microsoft.com/devcontainers/python:3.12
 # 2. 設定在容器內的工作目錄
 WORKDIR /app
 
+# 2.5 安裝中日韓字型 (matplotlib 畫繁中標題用, 否則中文變豆腐方塊)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
 # 3. 複製並安裝依賴 (這一步會被快取，加速後續建置)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

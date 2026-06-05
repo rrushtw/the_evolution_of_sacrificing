@@ -175,6 +175,7 @@ def _signature():
     return {"reps": REPS, "generations": GENS, "base_seed": BASE_SEED,
             "presets": PRESETS, "churn_grid": CHURNS,
             "knockouts": [k[0] for k in KNOCKOUTS],
+            "assortment": GameConfig.ASSORTMENT,
             "strategies": len(TYPES), "N": N}
 
 
@@ -312,6 +313,7 @@ def main():
         "config": {"reps": REPS, "generations": GENS, "base_seed": BASE_SEED,
                    "presets": PRESETS, "r_star": rstars,
                    "churn_grid": CHURNS, "knockouts": [k[0] for k in KNOCKOUTS],
+                   "assortment": GameConfig.ASSORTMENT,
                    "strategies": len(TYPES), "N": N,
                    "duration_seconds": round(time.time() - started, 1)},
         "cells": {f"preset={p}|churn={c}|{lab}": v
