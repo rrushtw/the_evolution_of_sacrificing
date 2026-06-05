@@ -10,7 +10,7 @@ from typing import Iterable, Type
 import engine
 import network
 from base_strategy import BaseStrategy
-from definitions import GameConfig
+from definitions import GameConfig, Reputation
 
 
 def load_all_strategies() -> list[Type[BaseStrategy]]:
@@ -130,6 +130,7 @@ def run_evolution(
     stability_tolerance: int = GameConfig.STABILITY_TOLERANCE,
     max_generations: int = GameConfig.MAX_GENERATIONS,
     on_generation=None,
+    initial_population: list[BaseStrategy] | None = None,
 ) -> dict:
     """
     Run a full evolutionary simulation.
@@ -155,8 +156,16 @@ def run_evolution(
     `on_generation(generation, snapshot)` is called every generation with a
     dict snapshot for callers that want to stream / log. The simulation
     itself is silent — the caller owns all UI.
+
+    `initial_population` (optional): seed a custom, possibly non-equal mix of
+    pre-built agents instead of equal copies per type — used by the invasion /
+    ESS experiment (resident majority + invader minority). When None (default)
+    the population is the usual `_build_population(strategy_types, initial_copies)`.
     """
-    population = _build_population(strategy_types, initial_copies)
+    # `initial_population` lets callers seed a custom (e.g. non-equal) mix —
+    # used by the invasion / ESS experiment. Default keeps the equal-copies build.
+    population = (initial_population if initial_population is not None
+                  else _build_population(strategy_types, initial_copies))
     net = network.Network(population, GameConfig.AVG_DEGREE, assortment)
 
     counts = _count_by_type(population)
@@ -176,6 +185,7 @@ def run_evolution(
         "reputation": _reputation_distribution(population),
         "max_swing": 0,
         "window_fill": len(stability_window),
+        "institutional_removals": 0,
         **_capital_stats(population),
     }
     history.append(initial_snapshot)
@@ -201,13 +211,25 @@ def run_evolution(
             agent.recover()
             agent.age += 1
 
-        # 3. Mortality: old age (rising with age) or bankruptcy.
+        # 3. Mortality: old age (rising with age) or bankruptcy, THEN the
+        #    third-party institution actively culls the BAD (Nowak's 5th rule).
         survivors, dead = [], []
+        institutional_removals = 0
+        inst_bad = GameConfig.INSTITUTION_STRENGTH
+        inst_fp = GameConfig.INSTITUTION_FALSE_POSITIVE
         for agent in population:
             death_prob = min(1.0, GameConfig.BASE_DEATH
                              + GameConfig.AGE_DEATH * agent.age)
             if agent.is_bankrupt() or random.random() < death_prob:
+                dead.append(agent)            # natural death (old age / bankruptcy)
+                continue
+            # Institution: remove the BAD (and, at the false-positive rate, the
+            # wrongly-accused GOOD). Removals flow through the SAME on_death /
+            # capital-weighted repopulate path below — no separate machinery.
+            inst_prob = inst_bad if agent.reputation == Reputation.BAD else inst_fp
+            if inst_prob > 0.0 and random.random() < inst_prob:
                 dead.append(agent)
+                institutional_removals += 1
             else:
                 survivors.append(agent)
 
@@ -226,6 +248,7 @@ def run_evolution(
                 "extinct_this_gen": list(just_extinct),
                 "max_swing": 0,
                 "window_fill": len(stability_window),
+                "institutional_removals": institutional_removals,
                 "duration_seconds": round(time.time() - gen_started, 3),
                 "capital_mean": 0, "capital_gini": 0, "age_mean": 0,
             }
@@ -261,6 +284,7 @@ def run_evolution(
             "extinct_this_gen": list(just_extinct),
             "max_swing": max_swing,
             "window_fill": len(stability_window),
+            "institutional_removals": institutional_removals,
             "duration_seconds": round(time.time() - gen_started, 3),
             "re_encounter_rate": round(
                 stats["repeats"] / (stats["encounters"] or 1), 4),

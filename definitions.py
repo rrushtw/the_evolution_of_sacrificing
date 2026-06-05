@@ -130,6 +130,15 @@ class GameConfig:
     # BLIND_PRIVATE: per-opponent memory is never recorded (private history ablated).
     BLIND_PRIVATE = os.getenv("BLIND_PRIVATE", "0") == "1"
 
+    # --- Third-party institutional punishment (Nowak 第五法則) ---
+    # 自發機制(結伴 r / 私記憶 w / 名聲 q)之外的第四條:由「系統」主動執法。每 round
+    # 把被判 BAD 的人以 INSTITUTION_STRENGTH 的機率直接淘汰(法律/平台封號/信用黑名單),
+    # 不必等受害者自己報復 —— 名聲從「警告下一個受害者」升級成「直接執法」。
+    # 0 = 無制度,完全向後相容(等同現狀)。淘汰走既有 mortality → on_death → repopulate。
+    INSTITUTION_STRENGTH = float(os.getenv("INSTITUTION_STRENGTH", "0.0"))
+    # 誤判率:每 round 把 GOOD 冤枉淘汰的機率(0 = 完美執法)。掃這條看制度何時反噬合作。
+    INSTITUTION_FALSE_POSITIVE = float(os.getenv("INSTITUTION_FALSE_POSITIVE", "0.0"))
+
     # --- Reproducibility ---
     # RANDOM_SEED: if set, main() seeds the global RNG once for a reproducible
     # single run. Unset (default) = fresh randomness each run. (The batch
