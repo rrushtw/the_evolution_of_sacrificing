@@ -27,7 +27,12 @@ class Network:
 
     def __init__(self, agents, avg_degree, assortment):
         self.assortment = assortment
-        self.contacts: dict = {a: set() for a in agents}
+        # contacts[a] is an *insertion-ordered* set of a's neighbours — a dict
+        # used as an ordered set (values are None). Ordinary sets iterate in
+        # object-id (memory-address) order, which differs run-to-run and breaks
+        # RANDOM_SEED reproducibility; a dict preserves the seed-determined
+        # construction order, so a fixed seed replays identically.
+        self.contacts: dict = {a: {} for a in agents}
         # Cached node list so draw/rewire are O(1) amortized, not O(N) — this
         # is what keeps high-churn runs (and 30× batch sweeps) tractable.
         self._nodes: list = list(agents)
@@ -51,13 +56,13 @@ class Network:
     def on_death(self, agent):
         """Remove a dead agent and all its ties."""
         for nb in list(self.contacts.get(agent, ())):
-            self.contacts[nb].discard(agent)
+            self.contacts[nb].pop(agent, None)
         self.contacts.pop(agent, None)
         self._nodes.remove(agent)
 
     def on_birth(self, agent, degree):
         """Add a newborn (a stranger entering the network) with fresh ties."""
-        self.contacts[agent] = set()
+        self.contacts[agent] = {}
         self._nodes.append(agent)
         for _ in range(degree):
             self._rewire(agent)
@@ -99,12 +104,12 @@ class Network:
 
     def _link(self, a, b):
         if a is not b:
-            self.contacts[a].add(b)
-            self.contacts[b].add(a)
+            self.contacts[a][b] = None
+            self.contacts[b][a] = None
 
     def _unlink(self, a, b):
-        self.contacts[a].discard(b)
-        self.contacts[b].discard(a)
+        self.contacts[a].pop(b, None)
+        self.contacts[b].pop(a, None)
 
     def _rewire(self, a):
         """

@@ -238,7 +238,9 @@ def run_evolution(
             stopped_reason = "extinct"
             counts = collections.Counter()
             surviving = set()
-            just_extinct = last_surviving
+            # sorted(): sets of strings iterate in a per-process (PYTHONHASHSEED)
+            # order, so sort for a stable, RANDOM_SEED-reproducible record.
+            just_extinct = sorted(last_surviving)
             for name in just_extinct:
                 extinction_order.append((generation, name))
             snapshot = {
@@ -269,7 +271,8 @@ def run_evolution(
         counts = _count_by_type(population)
         surviving = set(counts.keys())
 
-        just_extinct = last_surviving - surviving
+        # sorted(): stable order across processes (see total-wipe-out branch).
+        just_extinct = sorted(last_surviving - surviving)
         for name in just_extinct:
             extinction_order.append((generation, name))
         last_surviving = surviving
