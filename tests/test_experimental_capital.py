@@ -3,7 +3,7 @@
 這些策略住在 strategies/experimental/ 子套件,load_all_strategies() 不會自動收 → 不污染
 canonical 16 策略實驗。此處直接 import 驗證 decide() 對資本的反應。
 """
-from definitions import Action, GameConfig, OpponentView, Reputation
+from definitions import Action, OpponentView, Reputation
 from strategies.experimental.sycophant import Sycophant
 from strategies.experimental.desperado import Desperado
 
@@ -23,11 +23,14 @@ def test_sycophant_notifies_richer_runs_poorer():
 
 
 def test_desperado_gambles_only_when_broke():
+    # 門檻 = 距破產(capital≤0)的距離,env 可調;測試引用 class 屬性以免寫死數字。
+    near_ruin = Desperado.DESPERATE_DISTANCE * 0.5
+    solvent = Desperado.DESPERATE_DISTANCE + 1.0
     d = Desperado()
-    d.capital = 0.1 * GameConfig.CAPITAL_BASELINE          # 快破產
-    assert d.decide(_view(capital=5.0)) == Action.RUN       # 背水一戰
-    d.capital = GameConfig.CAPITAL_BASELINE                 # 健康
-    assert d.decide(_view(capital=5.0)) == Action.NOTIFY    # 有本錢就合作
+    d.capital = near_ruin                                   # 逼近破產 → 背水一戰
+    assert d.decide(_view(capital=5.0)) == Action.RUN
+    d.capital = solvent                                     # 還有本錢 → 合作
+    assert d.decide(_view(capital=5.0)) == Action.NOTIFY
     # 對手資本不影響它(只看自己)
-    d.capital = 0.1 * GameConfig.CAPITAL_BASELINE
+    d.capital = near_ruin
     assert d.decide(_view(capital=0.01)) == Action.RUN
