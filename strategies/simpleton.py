@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Simpleton(BaseStrategy):
@@ -16,13 +16,8 @@ class Simpleton(BaseStrategy):
     def color(self) -> tuple:
         return (210, 180, 140)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        my_records = self.private_history_with(opponent_unique_id)
+    def decide(self, view: OpponentView) -> Action:
+        my_records = self.private_history_with(view.unique_id)
 
         for r in reversed(my_records):
             opp_act = r.get("opponent_action")

@@ -1,7 +1,7 @@
 import random
 
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Chaotic(BaseStrategy):
@@ -15,10 +15,5 @@ class Chaotic(BaseStrategy):
     def color(self) -> tuple:
         return (148, 0, 211)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
+    def decide(self, view: OpponentView) -> Action:
         return Action.NOTIFY if random.random() < 0.5 else Action.RUN

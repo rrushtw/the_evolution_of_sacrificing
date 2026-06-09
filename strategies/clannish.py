@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Clannish(BaseStrategy):
@@ -22,12 +22,7 @@ class Clannish(BaseStrategy):
     def color(self) -> tuple:
         return (160, 82, 45)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        if self.private_history_with(opponent_unique_id):
+    def decide(self, view: OpponentView) -> Action:
+        if self.private_history_with(view.unique_id):
             return Action.NOTIFY      # a known face — help them
         return Action.RUN             # a stranger — don't risk it

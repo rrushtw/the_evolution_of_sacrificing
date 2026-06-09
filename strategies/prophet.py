@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Prophet(BaseStrategy):
@@ -18,18 +18,13 @@ class Prophet(BaseStrategy):
     def color(self) -> tuple:
         return (255, 215, 0)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        for r in opponent_history:
+    def decide(self, view: OpponentView) -> Action:
+        for r in view.history:
             if r.get("my_action") == Action.NOTIFY:
                 return Action.NOTIFY
 
         spotter_actions = [
-            r["my_action"] for r in opponent_history
+            r["my_action"] for r in view.history
             if r.get("my_action") is not None
         ]
         if not spotter_actions:

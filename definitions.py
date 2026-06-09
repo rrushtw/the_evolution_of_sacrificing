@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -21,6 +22,32 @@ class Action(Enum):
     """
     NOTIFY = "Notify"
     RUN = "Run"
+
+
+@dataclass
+class OpponentView:
+    """
+    Everything a spotter gets to know about its opponent when deciding.
+
+    A single context object instead of positional args, so adding a new
+    channel (here: `capital`, Phase 2.5) never breaks every strategy's
+    `decide()` signature again. The engine fills it — and applies the
+    knockout masks: under BLIND_REPUTATION, `reputation` is forced GOOD and
+    `history` to [] before they reach the strategy.
+
+    Fields:
+        unique_id:  opaque opponent ID — key into self.opponent_history for
+                    private, per-opponent memory.
+        reputation: opponent's public Standing (GOOD/BAD), possibly masked.
+        history:    opponent's public action log (their my_history), possibly
+                    masked to [].
+        capital:    opponent's current capital (the 'influence gap'). Always
+                    visible for now — there is no BLIND_CAPITAL knockout yet.
+    """
+    unique_id: str
+    reputation: Reputation
+    history: list
+    capital: float
 
 
 class GameConfig:

@@ -1,6 +1,6 @@
 import random
 
-from definitions import Action, GameConfig, Reputation
+from definitions import Action, GameConfig, OpponentView, Reputation
 from base_strategy import BaseStrategy
 
 
@@ -72,20 +72,23 @@ def _resolve_interaction(s1: BaseStrategy, s2: BaseStrategy, noise: float):
     s2_pub_hist = [] if blind_pub else s2.my_history
     s1_pub_hist = [] if blind_pub else s1.my_history
 
+    # Capital is the Phase 2.5 channel — always visible (no BLIND_CAPITAL yet).
     if s1_spots:
-        intent = s1.decide(
-            opponent_unique_id=s2.unique_id,
-            opponent_reputation=s2_rep_seen_by_s1,
-            opponent_history=s2_pub_hist,
-        )
+        intent = s1.decide(OpponentView(
+            unique_id=s2.unique_id,
+            reputation=s2_rep_seen_by_s1,
+            history=s2_pub_hist,
+            capital=s2.capital,
+        ))
         s1_action = s1.apply_internal_noise(intent)
 
     if s2_spots:
-        intent = s2.decide(
-            opponent_unique_id=s1.unique_id,
-            opponent_reputation=s1_rep_seen_by_s2,
-            opponent_history=s1_pub_hist,
-        )
+        intent = s2.decide(OpponentView(
+            unique_id=s1.unique_id,
+            reputation=s1_rep_seen_by_s2,
+            history=s1_pub_hist,
+            capital=s1.capital,
+        ))
         s2_action = s2.apply_internal_noise(intent)
 
     if s1_spots:

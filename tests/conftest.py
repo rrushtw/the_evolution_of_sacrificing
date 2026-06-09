@@ -10,7 +10,7 @@ import random
 
 import pytest
 
-from definitions import Action, GameConfig, Reputation
+from definitions import Action, GameConfig, OpponentView, Reputation
 from base_strategy import BaseStrategy
 
 
@@ -59,7 +59,7 @@ class AlwaysNotify(BaseStrategy):
     def color(self) -> tuple:
         return (0, 255, 0)
 
-    def decide(self, opponent_unique_id, opponent_reputation, opponent_history) -> Action:
+    def decide(self, view: OpponentView) -> Action:
         return Action.NOTIFY
 
 
@@ -73,7 +73,7 @@ class AlwaysRun(BaseStrategy):
     def color(self) -> tuple:
         return (255, 0, 0)
 
-    def decide(self, opponent_unique_id, opponent_reputation, opponent_history) -> Action:
+    def decide(self, view: OpponentView) -> Action:
         return Action.RUN
 
 
@@ -87,9 +87,9 @@ class SpyStrategy(BaseStrategy):
     def color(self) -> tuple:
         return (128, 128, 128)
 
-    def decide(self, opponent_unique_id, opponent_reputation, opponent_history) -> Action:
-        self.seen_reputation = opponent_reputation
-        self.seen_history = opponent_history
+    def decide(self, view: OpponentView) -> Action:
+        self.seen_reputation = view.reputation
+        self.seen_history = view.history
         return Action.NOTIFY
 
 

@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Jacobin(BaseStrategy):
@@ -20,13 +20,8 @@ class Jacobin(BaseStrategy):
     def color(self) -> tuple:
         return (178, 34, 34)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        for r in opponent_history:
+    def decide(self, view: OpponentView) -> Action:
+        for r in view.history:
             if r.get("my_action") == Action.RUN:
                 return Action.RUN
 

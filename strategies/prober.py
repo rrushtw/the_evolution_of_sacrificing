@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Prober(BaseStrategy):
@@ -28,13 +28,8 @@ class Prober(BaseStrategy):
     def color(self) -> tuple:
         return (218, 165, 32)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        my_records = self.private_history_with(opponent_unique_id)
+    def decide(self, view: OpponentView) -> Action:
+        my_records = self.private_history_with(view.unique_id)
 
         my_spotter_count = sum(
             1 for r in my_records if r.get("my_action") is not None)

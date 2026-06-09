@@ -3,7 +3,7 @@ import random
 import uuid
 from typing import Tuple
 
-from definitions import Action, GameConfig, Reputation
+from definitions import Action, GameConfig, OpponentView, Reputation
 
 
 class BaseStrategy(abc.ABC):
@@ -11,9 +11,10 @@ class BaseStrategy(abc.ABC):
     Abstract contract for every strategy.
 
     Phase 1 design:
-    - decide() receives ONLY 4 public fields about the opponent — never the
-      opponent instance itself. This blocks any `type(opponent)` cheat and
-      enforces the "you don't know friend from foe" research premise.
+    - decide() receives ONLY an OpponentView of public fields about the
+      opponent — never the opponent instance itself. This blocks any
+      `type(opponent)` cheat and enforces the "you don't know friend from foe"
+      research premise. (Phase 2.5 added the opponent's capital to that view.)
     - Reputation is binary (GOOD/BAD), updated by Standing Strategy rules.
     - Memory has two layers: my_history (public log) and opponent_history
       (private record keyed by opponent's unique_id).
@@ -62,22 +63,21 @@ class BaseStrategy(abc.ABC):
     # ------------------------------------------------------------------
 
     @abc.abstractmethod
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
+    def decide(self, view: OpponentView) -> Action:
         """
         Called by the engine when this agent is the spotter.
 
         Args:
-            opponent_unique_id: opaque ID — only useful for keying into
-                self.opponent_history for private memory of this opponent.
-            opponent_reputation: public Standing of the opponent (GOOD/BAD).
-            opponent_history: opponent's full public log (their my_history).
-                Each entry is a dict like {"my_action": ..., "opponent_action": ...}
-                from the opponent's point of view.
+            view: an OpponentView of public fields about the opponent —
+                - view.unique_id: opaque ID — only useful for keying into
+                  self.opponent_history for private memory of this opponent.
+                - view.reputation: public Standing of the opponent (GOOD/BAD).
+                - view.history: opponent's full public log (their my_history).
+                  Each entry is a dict like
+                  {"my_action": ..., "opponent_action": ...} from the
+                  opponent's point of view.
+                - view.capital: opponent's current capital (Phase 2.5).
+                Under knockouts the engine masks reputation→GOOD / history→[].
 
         Returns:
             Action.NOTIFY or Action.RUN.

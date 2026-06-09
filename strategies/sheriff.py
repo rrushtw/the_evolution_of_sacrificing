@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView, Reputation
 
 
 class Sheriff(BaseStrategy):
@@ -16,12 +16,7 @@ class Sheriff(BaseStrategy):
     def color(self) -> tuple:
         return (184, 134, 11)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        if opponent_reputation == Reputation.GOOD:
+    def decide(self, view: OpponentView) -> Action:
+        if view.reputation == Reputation.GOOD:
             return Action.NOTIFY
         return Action.RUN
