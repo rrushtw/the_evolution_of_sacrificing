@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class TitForTwoTats(BaseStrategy):
@@ -20,13 +20,8 @@ class TitForTwoTats(BaseStrategy):
     def color(self) -> tuple:
         return (70, 130, 180)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        my_records = self.private_history_with(opponent_unique_id)
+    def decide(self, view: OpponentView) -> Action:
+        my_records = self.private_history_with(view.unique_id)
 
         # Collect opponent's most recent two actions toward me.
         opp_actions: list[Action] = []

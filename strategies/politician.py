@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Politician(BaseStrategy):
@@ -23,15 +23,10 @@ class Politician(BaseStrategy):
     def color(self) -> tuple:
         return (128, 0, 128)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
+    def decide(self, view: OpponentView) -> Action:
         notify_count = 0
         run_count = 0
-        for r in opponent_history:
+        for r in view.history:
             act = r.get("my_action")
             if act == Action.NOTIFY:
                 notify_count += 1

@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Altruist(BaseStrategy):
@@ -13,10 +13,5 @@ class Altruist(BaseStrategy):
     def color(self) -> tuple:
         return (0, 255, 0)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
+    def decide(self, view: OpponentView) -> Action:
         return Action.NOTIFY

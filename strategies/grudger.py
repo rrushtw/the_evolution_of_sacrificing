@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView
 
 
 class Grudger(BaseStrategy):
@@ -20,13 +20,8 @@ class Grudger(BaseStrategy):
     def color(self) -> tuple:
         return (139, 0, 0)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
-        my_records = self.private_history_with(opponent_unique_id)
+    def decide(self, view: OpponentView) -> Action:
+        my_records = self.private_history_with(view.unique_id)
 
         for r in my_records:
             if r.get("opponent_action") == Action.RUN:

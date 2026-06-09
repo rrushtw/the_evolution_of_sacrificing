@@ -1,5 +1,5 @@
 from base_strategy import BaseStrategy
-from definitions import Action, Reputation
+from definitions import Action, OpponentView, Reputation
 
 
 class Whitewasher(BaseStrategy):
@@ -22,12 +22,7 @@ class Whitewasher(BaseStrategy):
     def color(self) -> tuple:
         return (192, 192, 192)
 
-    def decide(
-        self,
-        opponent_unique_id: str,
-        opponent_reputation: Reputation,
-        opponent_history: list[dict],
-    ) -> Action:
+    def decide(self, view: OpponentView) -> Action:
         if self.reputation == Reputation.GOOD:
             return Action.RUN         # spend the good name
         return Action.NOTIFY          # launder back to GOOD
