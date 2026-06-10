@@ -522,6 +522,82 @@ well-mixed(assort 0)、結構完全不幫忙,5% 的制度淘汰率照樣把崩�
 
 ---
 
+## capital-aware 隔離擂台 — 換個感官:會「看財富」的策略能立足嗎?(Phase 2.5)
+
+前面所有策略只看得到對手的**名聲**與**歷史**,看不到 Phase 2 世界的本體 —— **資本 / 影響力差距**。
+這一節給 `decide()` 加一條新感官:讓策略讀到對手的 capital(`OpponentView.capital`),問一個很現實的
+問題:**會「看人下菜碟」的勢利策略,能不能在這個會追蹤名聲的社會裡占到便宜?**
+
+兩個 capital-aware 策略(住在 `strategies/experimental/` 子套件 —— `load_all_strategies()` 的
+`pkgutil` 不遞迴 → **canonical 16 策略的擂台 / 甜蜜點 / 入侵 / 制度結果完全不受污染**;這裡顯式把它們
+加進去組成 18 策略生態):
+
+- **Sycophant(嫌貧愛富)**:對比自己富的人 NOTIFY(攀附),對比自己窮的人 RUN(欺壓)。kiss-up, kick-down。
+- **Desperado(背水一戰)**:自己逼近破產時 RUN 賭一把,有本錢時 NOTIFY 合作。
+
+### 結果:兩個都不可行(負面結果)
+
+`capital_arena.py`,18 策略 × churn 5 格 × n=30、well-mixed(assort 0):
+
+| churn | Sycophant 份額(存活率) | Desperado 份額(存活率) | 該格冠軍 |
+| :--: | :-- | :-- | :-- |
+| 0.0 | 0%(3%) | 5%(10%) | Sheriff |
+| 0.1 | 1%(3%) | 8%(23%) | Sheriff |
+| 0.3 | 1%(7%) | 0%(3%) | Cheater |
+| 0.6 | 1%(7%) | 1%(3%) | Clannish |
+| 1.0 | 5%(13%) | 4%(10%) | Clannish |
+
+(存活率 = 30 reps 中該策略沒絕種的比例。)兩者份額長期 <10%、**多數 run 直接團滅**,且**任一格的 modal
+冠軍都不是它們** —— 冠軍清一色是既有策略(Sheriff / Cheater / Clannish / Prober)。
+
+**為什麼 Sycophant 死**:在會追蹤名聲的社會「對較窮者 RUN」就是把自己變成一個**被認得的背叛者**;
+一旦標成 BAD,Sheriff / Grudger / Jacobin 那票執法 / 互惠策略就群起反制。它連 Prober「先探再適應」的
+紀律都沒有,比真掠食者還差。
+
+### Desperado 的校準故事:先排除「調參假象」,才敢下負面結論
+
+第一版 Desperado 的破產門檻寫成 `0.4×CAPITAL_BASELINE = 2.0`。但**這個 18 策略生態的實際資本水準遠低於
+baseline**(5.0 是搆不到的理想值 —— 連冠軍 Sheriff 的資本也才 **~0.5–0.8**;兩個額外剝削者把整體資本壓得
+比 16 策略世界更低)。門檻 2.0 遠高於現實 → Desperado **永遠在「破產中」、退化成一個 constant defector**,
+根本沒測到「有錢就合作」那一支。
+
+所以我們**把門檻改錨定到破產邊界**(ruin = capital≤0),並**掃距 ruin 三個值**(各 150 runs),確認結論不是
+門檻沒調好:
+
+| 距 ruin 門檻 | Desperado 份額峰值 | 拿下的 churn 格冠軍 |
+| :--: | :--: | :--: |
+| 0.3(程式預設) | 8.3% | **0** |
+| 0.6 | 7.2% | **0** |
+| 1.0 | 3.8% | **0** |
+
+**任何公平校準下都拿不下一格,而且越愛賭(門檻越高)越慘。** 背水一戰在此生態是**真．不可行**,不是沒調好參。
+
+### 一句話
+
+> **加一條「看財富」的感官,並沒有開出新的生態位。** 不論「攀附富人 / 欺壓窮人」(Sycophant)還是
+> 「窮極則賭」(Desperado),只要行為落到「在常見情境下背叛」,就被名聲機制標成 BAD 而淘汰。
+> **社會看的是「你有沒有被標成背叛者」,不是「你看了什麼」** —— 與全研究主軸一致:名聲可見性才是命脈。
+
+### 怎麼重現
+
+```bash
+# 隔離擂台:18 策略(canonical 16 + Sycophant/Desperado)× churn × n=30
+docker run --rm -v ~/eos/output:/app/output \
+  -e REPS=30 -e BATCH_GENERATIONS=300 -e CHURN_GRID=0.0,0.1,0.3,0.6,1.0 \
+  -e ASSORTMENT=0.0 -e RANDOM_SEED=12345 -e JOBS=20 \
+  -e DESPERADO_THRESHOLD=0.3 \
+  eos-sim python -u experiments/capital_arena.py
+```
+
+> **隔離保證**:capital-aware 策略住在 `strategies/experimental/` 子套件,canonical 的擂台 / 甜蜜點 / 入侵 /
+> 制度實驗(走 `load_all_strategies()`)看不到它們 → 那些已發表結果零污染(`load_all_strategies()` 仍回 16)。
+
+> **範圍**:這是**隔離實驗**,回答「capital-aware 策略在此 16 策略生態能否立足」;**未**把它們正式收進
+> canonical 生態重跑擂台 / ESS(那需另一輪、會動到既有結論的前提)。`BLIND_CAPITAL` knockout 與第三個
+> 策略 NoblesseOblige(富則施)留作後續。
+
+---
+
 ## 注意
 
 - 無 random seed 時 run-to-run 變異大(模型特性);本實驗以固定 base seed + n=30 取得統計顯著性。
